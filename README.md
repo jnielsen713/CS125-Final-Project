@@ -4,7 +4,7 @@ Student T JOIN Student J
 
 2. Who is using this?
 
-Youth group leaders/organizers who manage the data for events and students. 
+Youth group leaders/organizers who manage the data for events, students, etc. 
 
 3. What do they want to do?
 

@@ -1,3 +1,5 @@
+# [ER DIAGRAM](https://drive.google.com/file/d/1tN48m4YXY3K9SACNuFlRv4L75lvu3BuS/view?usp=sharing)
+
 **1. What's your team name?**
 
 Student T JOIN Student J

@@ -10,10 +10,10 @@ USE youth_group_database;
 
 CREATE TABLE Person (
     personId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    firstName VARCHAR(25),
-    lastName VARCHAR(25),
+    firstName VARCHAR(50) NOT NULL,
+    lastName VARCHAR(50) NOT NULL,
     birthday DATE NOT NULL,
-    email VARCHAR(50),
+    email VARCHAR(100),
     phone VARCHAR(20)
 );
 
@@ -24,26 +24,26 @@ CREATE TABLE Role (
 
 CREATE TABLE Event (
     eventId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL
+    eventName VARCHAR(100) NOT NULL,
     type VARCHAR(50),
     startDateTime DATETIME NOT NULL,
     endDateTime DATETIME,
-    location VARCHAR(50) NOT NULL
+    location VARCHAR(100) NOT NULL
 );
 
 CREATE TABLE SmallGroup (
     smallGroupId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
     description VARCHAR(255),
-    leaderId SMALLINT UNSIGNED,
+    leaderId INT UNSIGNED,
     CONSTRAINT fk_small_group_leader FOREIGN KEY (leaderId) REFERENCES Person(personId)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
 
 CREATE TABLE PersonRole (
-    personId INT UNSIGNED,
-    roleId INT UNSIGNED,
+    personId INT UNSIGNED NOT NULL,
+    roleId INT UNSIGNED NOT NULL,
     PRIMARY KEY (personId, roleId),
     CONSTRAINT fk_person_role_person FOREIGN KEY (personId) REFERENCES Person(personId)
         ON DELETE CASCADE
@@ -69,7 +69,7 @@ CREATE TABLE ParentChild (
 CREATE TABLE EventRegistration (
     personId INT UNSIGNED NOT NULL,
     eventId INT UNSIGNED NOT NULL,
-    registrationDate DATETIME NOT NULL,
+    registrationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (personId, eventId),
     CONSTRAINT fk_event_registration_to_person FOREIGN KEY (personId) REFERENCES Person(personId)
         ON DELETE CASCADE
@@ -90,7 +90,7 @@ CREATE TABLE Attendance (
         ON UPDATE CASCADE,
     CONSTRAINT fk_attendance_to_event FOREIGN KEY (eventId) REFERENCES Event(eventId)
         ON DELETE CASCADE
-        ON UPDATE CASCADE
+        ON UPDATE CASCADE,
     CHECK (checkedOutAt IS NULL OR checkedOutAt >= checkedInAt)
 );
 

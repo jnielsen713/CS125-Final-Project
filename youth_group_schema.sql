@@ -65,3 +65,69 @@ CREATE TABLE ParentChild (
         ON UPDATE CASCADE,
     CHECK (parentId != childId)
 );
+
+CREATE TABLE EventRegistration (
+    personId INT UNSIGNED NOT NULL,
+    eventId INT UNSIGNED NOT NULL,
+    registrationDate DATETIME NOT NULL,
+    PRIMARY KEY (personId, eventId),
+    CONSTRAINT fk_event_registration_to_person FOREIGN KEY (personId) REFERENCES Person(personId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_event_registration_to_event FOREIGN KEY (eventId) REFERENCES Event(eventId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE Attendance (
+    personId INT UNSIGNED NOT NULL,
+    eventId INT UNSIGNED NOT NULL,
+    checkedInAt DATETIME NOT NULL,
+    checkedOutAt DATETIME,
+    PRIMARY KEY (personId, eventId),
+    CONSTRAINT fk_attendance_to_person FOREIGN KEY (personId) REFERENCES Person(personId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_attendance_to_event FOREIGN KEY (eventId) REFERENCES Event(eventId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+    CHECK (checkedOutAt IS NULL OR checkedOutAt >= checkedInAt)
+);
+
+CREATE TABLE SmallGroupMembership (
+    studentId INT UNSIGNED NOT NULL,
+    smallGroupId INT UNSIGNED NOT NULL,
+    joinedDate DATE NOT NULL,
+    PRIMARY KEY (studentId, smallGroupId),
+    CONSTRAINT fk_small_group_membership_to_personasstudent FOREIGN KEY (studentId) REFERENCES Person(personId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_small_group_membership_to_small_group FOREIGN KEY (smallGroupId) REFERENCES SmallGroup(smallGroupId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE SmallGroupMeeting (
+    groupMeetingId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    smallGroupId INT UNSIGNED NOT NULL,
+    dateTime DATETIME NOT NULL,
+    notes TEXT,
+    CONSTRAINT fk_small_group_meeting_to_small_group FOREIGN KEY (smallGroupId) REFERENCES SmallGroup(smallGroupId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE SmallGroupMeetingAttendance (
+    groupMeetingId INT UNSIGNED NOT NULL,
+    personId INT UNSIGNED NOT NULL,
+    checkedInAt DATETIME NOT NULL,
+    checkedOutAt DATETIME,
+    PRIMARY KEY (groupMeetingId, personId),
+    CONSTRAINT fk_small_group_meeting_attendance_to_smallgroupmeeting FOREIGN KEY (groupMeetingId) REFERENCES SmallGroupMeeting(groupMeetingId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_small_group_meeting_attendance_to_person FOREIGN KEY (personId) REFERENCES Person(personId)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CHECK (checkedOutAt IS NULL OR checkedOutAt >= checkedInAt)
+);

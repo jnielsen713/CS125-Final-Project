@@ -1,5 +1,13 @@
-# [ER DIAGRAM](https://drive.google.com/file/d/1tN48m4YXY3K9SACNuFlRv4L75lvu3BuS/view?usp=sharing)
-
+# How to start the app
+1. Clone the repository on to your device
+2. Start a docker container, be sure to note your user information
+3. Within the docker container, run youth_group_schema.sql, and then youth_group_data.sql
+4. In your IDE of choice, create a copy of template.env and rename it to just .env
+5. Add in your user information! .gitignore will keep this private to your device.
+6. Run db_programming.py, and it will spin up!
+7. Use docker or the terminal to see where the app is running, and you can use insomnia to read data by pasting the link and following it with /people, /events, or /smallgroups. More to be added in the future. 
+   
+# FAQ
 **1. What's your team name?**
 
 Student T JOIN Student J

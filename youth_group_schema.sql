@@ -62,8 +62,7 @@ CREATE TABLE ParentChild (
         ON UPDATE CASCADE,
     CONSTRAINT fk_parent_child_personaschild FOREIGN KEY (childId) REFERENCES Person(personId)
         ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    CHECK (parentId != childId)
+        ON UPDATE CASCADE
 );
 
 CREATE TABLE EventRegistration (

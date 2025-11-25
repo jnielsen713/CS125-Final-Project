@@ -7,10 +7,8 @@ import os
 # For API
 from flask import Flask, jsonify, request
 
-
 # This will let us keep our user information private by reading it from an external file.
 load_dotenv()
-
 
 # Try-Except block to print an error message instead of crashing the program
 # From Zybook
@@ -32,7 +30,6 @@ def get_connection():
             print('Cannot connect to database:', err)
     
     return youthGroupConnection
-
 
 # API
 app = Flask(__name__)

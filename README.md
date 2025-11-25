@@ -1,11 +1,13 @@
 # How to start the app
-1. Clone the repository on to your device
+1. Clone the repository on to your device, and install packages mysql-connector-python, python-dotenv, and Flask
 2. Start a docker container, be sure to note your user information
-3. Within the docker container, run youth_group_schema.sql, and then youth_group_data.sql
+3. Within the docker container:
+   -- copy over youth_group_schema.sql and youth_group_data.sql files
+   -- run youth_group_schema.sql, and then youth_group_data.sql (the data file should print data verification information in the form of query results)
 4. In your IDE of choice, create a copy of template.env and rename it to just .env
 5. Add in your user information! .gitignore will keep this private to your device.
 6. Run db_programming.py, and it will spin up!
-7. Use docker or the terminal to see where the app is running, and you can use insomnia to read data by pasting the link and following it with /people, /events, or /smallgroups. More to be added in the future. 
+7. Use docker or the terminal to see where the app is running, and you can use Insomnia to read data by pasting the link and following it with /people, /events, or /smallgroups. More to be added in the future. 
    
 # FAQ
 **1. What's your team name?**

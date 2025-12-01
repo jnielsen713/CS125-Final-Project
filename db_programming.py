@@ -78,6 +78,20 @@ def get_students():
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/parents")
+def get_parents():
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, p.email, p.phone 
+        FROM Person p 
+        JOIN PersonRole pr ON p.personId = pr.personId 
+        WHERE pr.roleId = 2
+        ORDER BY p.lastName, p.firstName;""")
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

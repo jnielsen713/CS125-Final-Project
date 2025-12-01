@@ -64,6 +64,20 @@ def get_smallgroups():
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/students")
+def get_students():
+    youthGroupConnection = get_connection()
+    youthGroupCursor = youthGroupConnection.cursor()
+    youthGroupCursor.execute("""SELECT p.personId, p.firstName, p.lastName, p.email, p.phone, p.birthday 
+        FROM Person p 
+        JOIN PersonRole pr ON p.personId = pr.personId 
+        WHERE pr.roleId = 1
+        ORDER BY p.lastName, p.firstName;""")
+    rows = youthGroupCursor.fetchall()
+    youthGroupCursor.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
 if __name__ == "__main__":
     app.run(debug=True)
 

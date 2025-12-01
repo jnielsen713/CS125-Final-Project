@@ -78,6 +78,7 @@ def get_students():
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 if __name__ == "__main__":
     app.run(debug=True)
 

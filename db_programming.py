@@ -92,6 +92,15 @@ def get_parents():
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/upcoming-events")
+def get_upcoming_events():
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT * FROM Event WHERE startDateTime > NOW() ORDER BY startDateTime;""")
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
 
 if __name__ == "__main__":
     app.run(debug=True)

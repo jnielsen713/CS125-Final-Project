@@ -72,7 +72,8 @@ def get_students():
         FROM Person p 
         JOIN PersonRole pr ON p.personId = pr.personId 
         WHERE pr.roleId = 1
-        ORDER BY p.lastName, p.firstName;""")
+        ORDER BY p.lastName, p.firstName;
+    """)
     rows = youthGroupCursor.fetchall()
     youthGroupCursor.close()
     youthGroupConnection.close()
@@ -86,7 +87,8 @@ def get_parents():
         FROM Person p 
         JOIN PersonRole pr ON p.personId = pr.personId 
         WHERE pr.roleId = 2
-        ORDER BY p.lastName, p.firstName;""")
+        ORDER BY p.lastName, p.firstName;
+    """)
     rows = ygc.fetchall()
     ygc.close()
     youthGroupConnection.close()
@@ -96,7 +98,23 @@ def get_parents():
 def get_upcoming_events():
     youthGroupConnection = get_connection()
     ygc = youthGroupConnection.cursor()
-    ygc.execute("""SELECT * FROM Event WHERE startDateTime > NOW() ORDER BY startDateTime;""")
+    ygc.execute("SELECT * FROM Event WHERE startDateTime > NOW() ORDER BY startDateTime;")
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
+@app.get("/student/<int:student_id>/parents")
+def get_student_parents(student_id):
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""
+        SELECT p.personId, p.firstName, p.lastName, p.email, p.phone 
+        FROM Person p 
+        JOIN ParentChild pc ON p.personId = pc.parentId 
+        WHERE pc.childId = %s
+        ORDER BY p.lastName, p.firstName;
+    """, (student_id,))
     rows = ygc.fetchall()
     ygc.close()
     youthGroupConnection.close()

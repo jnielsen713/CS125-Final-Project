@@ -164,6 +164,21 @@ def get_event_registrations(event_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/event/<int:event_id>/attendances")
+def get_event_attendances(event_id):
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, a.checkedInAt, a.checkedOutAt 
+        FROM Person p 
+        JOIN Attendance a ON p.personId = a.personId 
+        WHERE a.eventId = %s
+        ORDER BY a.checkedInAt;
+    """, (event_id,))
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
 if __name__ == "__main__":
     app.run(debug=True)
 

@@ -134,6 +134,21 @@ def get_parent(parent_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/smallgroup/<int:group_id>/members")
+def get_smallgroup_members(group_id):
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, p.email, p.phone, sgm.joinedDate 
+    FROM Person p 
+    JOIN SmallGroupMembership sgm ON p.personId = sgm.studentId 
+    WHERE sgm.smallGroupId = %s
+    ORDER BY p.lastName, p.firstName;
+    """, (group_id,))
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
 if __name__ == "__main__":
     app.run(debug=True)
 

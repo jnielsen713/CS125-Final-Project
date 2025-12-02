@@ -149,6 +149,21 @@ def get_smallgroup_members(group_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/event/<int:event_id>/registrations")
+def get_event_registrations(event_id):
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, p.email, p.phone, er.registrationDate 
+        FROM Person p 
+        JOIN EventRegistration er ON p.personId = er.personId 
+        WHERE er.eventId = %s
+        ORDER BY er.registrationDate;
+    """, (event_id,))
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
 if __name__ == "__main__":
     app.run(debug=True)
 

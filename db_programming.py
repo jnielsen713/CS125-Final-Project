@@ -108,13 +108,27 @@ def get_upcoming_events():
 def get_student_parents(student_id):
     youthGroupConnection = get_connection()
     ygc = youthGroupConnection.cursor()
-    ygc.execute("""
-        SELECT p.personId, p.firstName, p.lastName, p.email, p.phone 
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, p.email, p.phone 
         FROM Person p 
         JOIN ParentChild pc ON p.personId = pc.parentId 
         WHERE pc.childId = %s
         ORDER BY p.lastName, p.firstName;
     """, (student_id,))
+    rows = ygc.fetchall()
+    ygc.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
+
+@app.get("/parent/<int:parent_id>/children")
+def get_parent(parent_id):
+    youthGroupConnection = get_connection()
+    ygc = youthGroupConnection.cursor()
+    ygc.execute("""SELECT p.personId, p.firstName, p.lastName, p.birthday, p.email 
+        FROM Person p 
+        JOIN ParentChild pc ON p.personId = pc.childId 
+        WHERE pc.parentId = %s
+        ORDER BY p.birthday;
+    """, (parent_id,))
     rows = ygc.fetchall()
     ygc.close()
     youthGroupConnection.close()

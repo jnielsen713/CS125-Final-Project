@@ -43,6 +43,7 @@ app = Flask(__name__)
 @app.get("/")
 def read_root():
     # FILL THIS OUT
+    pass
 
 @app.get("/people")
 def get_people():
@@ -193,6 +194,7 @@ def get_event_attendances(event_id):
 def get_event_checkin_status(event_id):
     if not r:
         return jsonify({"error": "Redis connection not available"})
+    return None
 
     # something with r.hgetall()
     # fetch the primary key data from redis, then use that to run a sql query with the field specified

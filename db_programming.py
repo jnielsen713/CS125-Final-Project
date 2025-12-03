@@ -7,6 +7,12 @@ import os
 # For API
 from flask import Flask, jsonify, request
 
+# Redis connection
+from redis_connection import get_redis_connection
+from datetime import datetime
+
+r = get_redis_connection()
+
 # This will let us keep our user information private by reading it from an external file.
 load_dotenv()
 
@@ -33,6 +39,10 @@ def get_connection():
 
 # API
 app = Flask(__name__)
+
+@app.get("/")
+def read_root():
+    # FILL THIS OUT
 
 @app.get("/people")
 def get_people():
@@ -178,6 +188,15 @@ def get_event_attendances(event_id):
     ygc.close()
     youthGroupConnection.close()
     return jsonify(rows)
+
+@app.get("event/<int:event_id>/checkin/status")
+def get_event_checkin_status(event_id):
+    if not r:
+        return jsonify({"error": "Redis connection not available"})
+
+    # something with r.hgetall()
+    # fetch the primary key data from redis, then use that to run a sql query with the field specified
+    # what you return should match the stuff specified in the pydantic models
 
 if __name__ == "__main__":
     app.run(debug=True)

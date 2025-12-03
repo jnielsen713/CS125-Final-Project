@@ -190,7 +190,7 @@ def get_event_attendances(event_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
-@app.get("event/<int:event_id>/checkin/status")
+@app.get("/event/<int:event_id>/checkin/status")
 def get_event_checkin_status(event_id):
     if not r:
         return jsonify({"error": "Redis connection not available"})
@@ -201,9 +201,36 @@ def get_event_checkin_status(event_id):
     return jsonify({
         "event_id": event_id,
         "total_checked_in": num_checked_in,
-        "student_Ids": checked_in_Ids,
+        "student_Ids": sorted(list(checked_in_Ids)),
         "check_in_times": check_in_times,
     })
+
+@app.post("/event/<int:event_id>/checkin/<int:student_id>")
+def checkin_student(event_id, student_id):
+    """Check in a student to an event in real-time using Redis"""
+    if not r:
+        return jsonify({"error": "Redis connection unavailable"}), 500
+
+    try:
+        # Add student to checked-in set
+        r.sadd(f"event:{event_id}:checkedIn", student_id)
+
+        # Record check-in time
+        timestamp = datetime.now().isoformat()
+        r.hset(f"event:{event_id}:checkInTimes", student_id, timestamp)
+
+        # Get current count
+        count = r.scard(f"event:{event_id}:checkedIn")
+
+        return jsonify({
+            "success": True,
+            "student_id": student_id,
+            "event_id": event_id,
+            "checked_in_at": timestamp,
+            "current_attendance": count
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     # fetch the primary key data from redis, then use that to run a sql query with the field specified
     # what you return should match the stuff specified in the pydantic models

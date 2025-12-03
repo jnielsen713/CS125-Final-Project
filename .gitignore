@@ -1,2 +1,4 @@
 # Environment variables (private info)
 .env
+# Folder with private information
+secrets

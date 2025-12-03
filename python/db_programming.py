@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, request
 
 # Redis connection
-from redis_connection import get_redis_connection
+from python.redis_connection import get_redis_connection
 from datetime import datetime
 
 r = get_redis_connection()

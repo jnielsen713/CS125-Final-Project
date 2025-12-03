@@ -194,9 +194,17 @@ def get_event_attendances(event_id):
 def get_event_checkin_status(event_id):
     if not r:
         return jsonify({"error": "Redis connection not available"})
-    return None
+    checked_in_Ids = r.smembers(f"event:{event_id}:checkedIn")
+    num_checked_in = r.scard(f"event:{event_id}:checkedIn")
+    check_in_times = r.hgetall(f"event:{event_id}:checkInTimes")
 
-    # something with r.hgetall()
+    return jsonify({
+        "event_id": event_id,
+        "total_checked_in": num_checked_in,
+        "student_Ids": checked_in_Ids,
+        "check_in_times": check_in_times,
+    })
+
     # fetch the primary key data from redis, then use that to run a sql query with the field specified
     # what you return should match the stuff specified in the pydantic models
 

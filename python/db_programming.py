@@ -8,9 +8,11 @@ import os
 from flask import Flask, jsonify, request
 
 # Redis connection
-from python.redis_connection import get_redis_connection
+from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields
+from redis_connection import get_redis_connection
 from datetime import datetime
 
+m = get_mongo_connection()
 r = get_redis_connection()
 
 # This will let us keep our user information private by reading it from an external file.
@@ -40,10 +42,12 @@ def get_connection():
 # API
 app = Flask(__name__)
 
+# MYSQL ENDPOINTS ---------------------------------------------------------------------------
+
 @app.get("/")
 def read_root():
     # FILL THIS OUT
-    pass
+    return "root"
 
 @app.get("/people")
 def get_people():
@@ -190,6 +194,8 @@ def get_event_attendances(event_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+
+# REDIS ENDPOINTS ---------------------------------------------------------------------------
 @app.get("/event/<int:event_id>/checkin/status")
 def get_event_checkin_status(event_id):
     if not r:
@@ -231,6 +237,14 @@ def checkin_student(event_id, student_id):
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# MONGO ENDPOINTS ---------------------------------------------------------------------------
+@app.get("/event-types/schemas")
+def get_all_event_type_schemas():
+    # Fetch all documents, hide internal ObjectId
+    docs = list(event_type_schemas.find({}, {"_id": 0}))
+    return jsonify({"event_types": docs})
+
 
     # fetch the primary key data from redis, then use that to run a sql query with the field specified
     # what you return should match the stuff specified in the pydantic models

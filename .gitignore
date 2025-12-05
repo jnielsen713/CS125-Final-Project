@@ -2,3 +2,5 @@
 .env
 # Folder with private information
 secrets
+
+__pycache__/

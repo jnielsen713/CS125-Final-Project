@@ -22,13 +22,19 @@ CREATE TABLE Role (
     name VARCHAR(50) NOT NULL
 );
 
+CREATE TABLE EventType (
+    eventTypeId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL
+);
+
 CREATE TABLE Event (
     eventId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     eventName VARCHAR(100) NOT NULL,
-    type VARCHAR(50),
+    eventTypeId INT UNSIGNED NOT NULL,
     startDateTime DATETIME NOT NULL,
     endDateTime DATETIME,
-    location VARCHAR(100) NOT NULL
+    location VARCHAR(100) NOT NULL,
+    FOREIGN KEY (eventTypeId) REFERENCES EventType(eventTypeId)
 );
 
 CREATE TABLE SmallGroup (

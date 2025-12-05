@@ -238,6 +238,9 @@ def checkin_student(event_id, student_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+    # fetch the primary key data from redis, then use that to run a sql query with the field specified
+    # what you return should match the stuff specified in the pydantic models
+
 # MONGO ENDPOINTS ---------------------------------------------------------------------------
 @app.get("/event-types/schemas")
 def get_all_event_type_schemas():
@@ -245,9 +248,7 @@ def get_all_event_type_schemas():
     docs = list(event_type_schemas.find({}, {"_id": 0}))
     return jsonify({"event_types": docs})
 
-
-    # fetch the primary key data from redis, then use that to run a sql query with the field specified
-    # what you return should match the stuff specified in the pydantic models
+# Run app -----------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     app.run(debug=True)

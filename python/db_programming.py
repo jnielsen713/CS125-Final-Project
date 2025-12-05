@@ -194,6 +194,212 @@ def get_event_attendances(event_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+
+# ============================================================================
+# SMALL GROUP MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.post("/smallgroup/<int:group_id>/add-student/<int:student_id>")
+def add_student_to_smallgroup(group_id, student_id):
+    """Add a student to a small group"""
+    try:
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        # Check if a student exists and is a student
+        ygc.execute("""
+                    SELECT p.personId, p.firstName, p.lastName
+                    FROM Person p
+                             JOIN PersonRole pr ON p.personId = pr.personId
+                    WHERE p.personId = %s
+                      AND pr.roleId = 1;
+                    """, (student_id,))
+
+        student = ygc.fetchone()
+        if not student:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Student not found"}), 404
+
+        # Check if a small group exists
+        ygc.execute("SELECT smallGroupId, name FROM SmallGroup WHERE smallGroupId = %s;", (group_id,))
+        group = ygc.fetchone()
+        if not group:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Small group not found"}), 404
+
+        # Add student to a small group
+        joined_date = datetime.now().date()
+        ygc.execute("""
+                    INSERT INTO SmallGroupMembership (studentId, smallGroupId, joinedDate)
+                    VALUES (%s, %s, %s);
+                    """, (student_id, group_id, joined_date))
+
+        youthGroupConnection.commit()
+        ygc.close()
+        youthGroupConnection.close()
+
+        return jsonify({
+            "success": True,
+            "message": f"{student[1]} {student[2]} added to {group[1]}",
+            "student_id": student_id,
+            "group_id": group_id,
+            "joined_date": joined_date.isoformat()
+        })
+
+    except mysql.connector.IntegrityError:
+        return jsonify({"error": "Student is already in this small group"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.delete("/smallgroup/<int:group_id>/remove-student/<int:student_id>")
+def remove_student_from_smallgroup(group_id, student_id):
+    """Remove a student from a small group"""
+    try:
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        # Remove student from small group
+        ygc.execute("""
+                    DELETE
+                    FROM SmallGroupMembership
+                    WHERE studentId = %s
+                      AND smallGroupId = %s;
+                    """, (student_id, group_id))
+
+        if ygc.rowcount == 0:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Student was not in this small group"}), 404
+
+        youthGroupConnection.commit()
+        ygc.close()
+        youthGroupConnection.close()
+
+        return jsonify({
+            "success": True,
+            "message": "Student removed from small group",
+            "student_id": student_id,
+            "group_id": group_id
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# EVENT REGISTRATION ENDPOINTS
+# ============================================================================
+
+@app.post("/event/<int:event_id>/register/<int:person_id>")
+def register_for_event(event_id, person_id):
+    """Register a person for an event"""
+    try:
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        # Check if person exists
+        ygc.execute("SELECT personId, firstName, lastName FROM Person WHERE personId = %s;", (person_id,))
+        person = ygc.fetchone()
+        if not person:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Person not found"}), 404
+
+        # Check if event exists
+        ygc.execute("SELECT eventId, eventName FROM Event WHERE eventId = %s;", (event_id,))
+        event = ygc.fetchone()
+        if not event:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Event not found"}), 404
+
+        # Register person for event
+        registration_date = datetime.now()
+        ygc.execute("""
+                    INSERT INTO EventRegistration (personId, eventId, registrationDate)
+                    VALUES (%s, %s, %s);
+                    """, (person_id, event_id, registration_date))
+
+        youthGroupConnection.commit()
+        ygc.close()
+        youthGroupConnection.close()
+
+        return jsonify({
+            "success": True,
+            "message": f"{person[1]} {person[2]} registered for {event[1]}",
+            "person_id": person_id,
+            "event_id": event_id,
+            "registration_date": registration_date.isoformat()
+        })
+
+    except mysql.connector.IntegrityError:
+        return jsonify({"error": "Person is already registered for this event"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.delete("/event/<int:event_id>/unregister/<int:person_id>")
+def unregister_from_event(event_id, person_id):
+    """Unregister a person from an event"""
+    try:
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        # Remove registration
+        ygc.execute("""
+                    DELETE
+                    FROM EventRegistration
+                    WHERE personId = %s
+                      AND eventId = %s;
+                    """, (person_id, event_id))
+
+        if ygc.rowcount == 0:
+            ygc.close()
+            youthGroupConnection.close()
+            return jsonify({"error": "Person was not registered for this event"}), 404
+
+        youthGroupConnection.commit()
+        ygc.close()
+        youthGroupConnection.close()
+
+        return jsonify({
+            "success": True,
+            "message": "Registration removed",
+            "person_id": person_id,
+            "event_id": event_id
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/person/<int:person_id>/registrations")
+def get_person_registrations(person_id):
+    """Get all events a person is registered for"""
+    try:
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        ygc.execute("""
+                    SELECT e.eventId, e.eventName, e.startDateTime, e.location, er.registrationDate
+                    FROM Event e
+                             JOIN EventRegistration er ON e.eventId = er.eventId
+                    WHERE er.personId = %s
+                    ORDER BY e.startDateTime;
+                    """, (person_id,))
+
+        rows = ygc.fetchall()
+        ygc.close()
+        youthGroupConnection.close()
+
+        return jsonify(rows)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # REDIS ENDPOINTS ---------------------------------------------------------------------------
 
 @app.get("/event/<int:event_id>/checkin/status")

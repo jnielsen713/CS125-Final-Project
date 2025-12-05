@@ -238,6 +238,229 @@ def checkin_student(event_id, student_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.post("/event/<int:event_id>/checkout/<int:student_id>")
+def checkout_student(event_id, student_id):
+    """Check out a student from an event using Redis"""
+    if not r:
+        return jsonify({"error": "Redis connection unavailable"}), 500
+
+    try:
+        # Remove student from a checked-in set
+        removed = r.srem(f"event:{event_id}:checkedIn", student_id)
+
+        if not removed:
+            return jsonify({"error": "Student was not checked in"}), 404
+
+        # Record check-out time
+        timestamp = datetime.now().isoformat()
+        r.hset(f"event:{event_id}:checkOutTimes", student_id, timestamp)
+
+        # Get current count
+        count = r.scard(f"event:{event_id}:checkedIn")
+
+        return jsonify({
+            "success": True,
+            "student_id": student_id,
+            "event_id": event_id,
+            "checked_out_at": timestamp,
+            "current_attendance": count
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/event/<int:event_id>/finalize")
+def finalize_event_attendance(event_id):
+    """
+    Finalize event - persist Redis check-in data to MySQL Attendance table
+    and clear Redis keys
+    """
+    if not r:
+        return jsonify({"error": "Redis connection unavailable"}), 500
+
+    try:
+        # Get all checked-in students and their times
+        checked_in_ids = r.smembers(f"event:{event_id}:checkedIn")
+        check_in_times = r.hgetall(f"event:{event_id}:checkInTimes")
+        check_out_times = r.hgetall(f"event:{event_id}:checkOutTimes")
+
+        if not checked_in_ids:
+            return jsonify({
+                "success": True,
+                "message": "No attendance to finalize",
+                "records_saved": 0
+            })
+
+        youthGroupConnection = get_connection()
+        ygc = youthGroupConnection.cursor()
+
+        records_saved = 0
+
+        for student_id in checked_in_ids:
+            student_id_str = str(student_id)
+            check_in_time = check_in_times.get(student_id_str)
+            check_out_time = check_out_times.get(student_id_str, None)
+
+            if check_in_time:
+                # Insert into Attendance table
+                ygc.execute("""
+                            INSERT INTO Attendance (personId, eventId, checkedInAt, checkedOutAt)
+                            VALUES (%s, %s, %s, %s) ON DUPLICATE KEY
+                            UPDATE
+                                checkedInAt =
+                            VALUES (checkedInAt), checkedOutAt =
+                            VALUES (checkedOutAt);
+                            """, (int(student_id), event_id, check_in_time, check_out_time))
+                records_saved += 1
+
+        youthGroupConnection.commit()
+        ygc.close()
+        youthGroupConnection.close()
+
+        # Clear Redis keys
+        r.delete(
+            f"event:{event_id}:checkedIn",
+            f"event:{event_id}:checkInTimes",
+            f"event:{event_id}:checkOutTimes"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "Attendance finalized and persisted to MySQL",
+            "records_saved": records_saved
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/events/active")
+def get_all_active_events():
+    """
+    Get all events that currently have people checked in (live events).
+    Useful for administrative dashboard to see what's happening RIGHT NOW.
+    """
+    if not r:
+        return jsonify({"error": "Redis connection unavailable"}), 500
+
+    try:
+        # Scan for all event check-in keys in Redis
+        active_events = []
+
+        # Get all keys matching the pattern
+        for key in r.scan_iter(match="event:*:checkedIn"):
+            # Extract event ID from key (format: "event:123:checkedIn")
+            event_id = int(key.split(':')[1])
+            count = r.scard(key)
+
+            if count > 0:  # Only include events with people checked in
+                # Get event details from MySQL
+                youthGroupConnection = get_connection()
+                ygc = youthGroupConnection.cursor()
+                ygc.execute("""
+                            SELECT eventId, eventName, startDateTime, location
+                            FROM Event
+                            WHERE eventId = %s;
+                            """, (event_id,))
+                event = ygc.fetchone()
+                ygc.close()
+                youthGroupConnection.close()
+
+                if event:
+                    active_events.append({
+                        "event_id": event_id,
+                        "event_name": event[1],
+                        "start_time": event[2].isoformat() if event[2] else None,
+                        "location": event[3],
+                        "current_attendance": count
+                    })
+
+        return jsonify({
+            "active_events": active_events,
+            "total_active_events": len(active_events),
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/dashboard/live")
+def get_live_dashboard():
+    """
+    Comprehensive live dashboard - shows all active events and their attendance.
+    This is what an administrator would see on their main screen.
+    """
+    if not r:
+        return jsonify({"error": "Redis connection unavailable"}), 500
+
+    try:
+        dashboard_data = {
+            "timestamp": datetime.now().isoformat(),
+            "active_events": [],
+            "total_people_across_all_events": 0
+        }
+
+        # Get all active event check-in keys
+        for key in r.scan_iter(match="event:*:checkedIn"):
+            event_id = int(key.split(':')[1])
+            count = r.scard(key)
+
+            if count > 0:
+                # Get event details from MySQL
+                youthGroupConnection = get_connection()
+                ygc = youthGroupConnection.cursor()
+                ygc.execute("""
+                            SELECT e.eventId, e.eventName, e.startDateTime, e.location, e.type
+                            FROM Event e
+                            WHERE e.eventId = %s;
+                            """, (event_id,))
+                event = ygc.fetchone()
+
+                if event:
+                    # Get checked-in student IDs
+                    checked_in_ids = list(r.smembers(key))
+
+                    # Get student names
+                    if checked_in_ids:
+                        placeholders = ','.join(['%s'] * len(checked_in_ids))
+                        query = f"""
+                            SELECT p.personId, p.firstName, p.lastName
+                            FROM Person p
+                            WHERE p.personId IN ({placeholders})
+                            ORDER BY p.lastName, p.firstName;
+                        """
+                        ygc.execute(query, [int(id) for id in checked_in_ids])
+                        students = ygc.fetchall()
+
+                        student_list = [{
+                            "id": s[0],
+                            "name": f"{s[1]} {s[2]}"
+                        } for s in students]
+                    else:
+                        student_list = []
+
+                    ygc.close()
+                    youthGroupConnection.close()
+
+                    dashboard_data["active_events"].append({
+                        "event_id": event_id,
+                        "event_name": event[1],
+                        "event_type": event[4],
+                        "start_time": event[2].isoformat() if event[2] else None,
+                        "location": event[3],
+                        "current_attendance": count,
+                        "students": student_list
+                    })
+
+                    dashboard_data["total_people_across_all_events"] += count
+
+        dashboard_data["number_of_active_events"] = len(dashboard_data["active_events"])
+
+        return jsonify(dashboard_data)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # MONGO ENDPOINTS ---------------------------------------------------------------------------
 @app.get("/event-types/schemas")
 def get_all_event_type_schemas():

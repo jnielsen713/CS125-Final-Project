@@ -8,8 +8,12 @@ load_dotenv()
 
 uri = str(os.getenv('MONGO_URI'))
 
-# Create a new client and connect to the server
-client = MongoClient(uri, server_api=ServerApi('1'))
+# Create a new client and connect to the server with TLS fix
+client = MongoClient(
+    uri,
+    server_api=ServerApi('1'),
+    tlsAllowInvalidCertificates=True
+)
 
 # Establish the database we are using
 db = client["youth_group_database"]
@@ -168,7 +172,7 @@ event_custom_fields_data = [
     "event_type_id": 6,
     "fields": {
         "topic": "Living Sacrifices",
-        "chapter_range": "Romans 12:1–8",
+        "chapter_range": "Romans 12:1-8",
         "has_discussion": True
     }
     },
@@ -214,9 +218,16 @@ event_custom_fields_data = [
     }
 ]
 
-# Insert the new data
-event_type_schemas.insert_many(event_type_schemas_data)
-event_custom_fields.insert_many(event_custom_fields_data)
+# Only insert if collections are empty
+try:
+    if event_type_schemas.count_documents({}) == 0:
+        event_type_schemas.insert_many(event_type_schemas_data)
+        event_custom_fields.insert_many(event_custom_fields_data)
+        print("MongoDB initialized with sample data")
+    else:
+        print("MongoDB data already exists, skipping initialization")
+except Exception as e:
+    print(f"MongoDB initialization note: {e}")
 
 def get_mongo_connection():
     # Send a ping to confirm a successful connection

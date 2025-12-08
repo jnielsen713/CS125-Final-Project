@@ -1,6 +1,6 @@
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-
+import certifi
 import os
 from dotenv import load_dotenv
 
@@ -8,11 +8,11 @@ load_dotenv()
 
 uri = str(os.getenv('MONGO_URI'))
 
-# Create a new client and connect to the server with TLS fix
+# Create a new client and connect to the server with proper TLS
 client = MongoClient(
     uri,
     server_api=ServerApi('1'),
-    tlsAllowInvalidCertificates=True
+    tlsCAFile=certifi.where()  # Use certifi's CA bundle instead of allowing invalid certs
 )
 
 # Establish the database we are using

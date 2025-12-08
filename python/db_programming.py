@@ -45,6 +45,10 @@ def get_connection():
 # API
 app = Flask(__name__)
 
+# Test endpoint
+@app.get("/ping")
+def ping():
+    return "pong"
 
 # MYSQL ENDPOINTS ---------------------------------------------------------------------------
 

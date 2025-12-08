@@ -21,8 +21,9 @@ load_dotenv()
 # Try-Except block to print an error message instead of crashing the program
 # From Zybook
 def get_connection():
+    youth_group_connection = None
     try:
-        youthGroupConnection = mysql.connector.connect(
+        youth_group_connection = mysql.connector.connect(
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
             host=os.getenv('DB_HOST'),
@@ -37,7 +38,7 @@ def get_connection():
         else:
             print('Cannot connect to database:', err)
     
-    return youthGroupConnection
+    return youth_group_connection
 
 # API
 app = Flask(__name__)

@@ -2,5 +2,7 @@
 .env
 # Folder with private information
 secrets
-
+# pycache
 __pycache__/
+# Pycharm resources
+.idea

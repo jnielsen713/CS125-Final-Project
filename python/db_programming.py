@@ -692,11 +692,94 @@ def get_live_dashboard():
 
 # MONGO ENDPOINTS ---------------------------------------------------------------------------
 
+# Get all event type schemas
 @app.get("/event-types/schemas")
 def get_all_event_type_schemas():
     # Fetch all documents, hide internal ObjectId
     docs = list(event_type_schemas.find({}, {"_id": 0}))
     return jsonify({"event_types": docs})
+
+
+# Get all individual events
+@app.get("/events/custom-data")
+def get_all_event_custom_data():
+    # Fetch all custom event data documents from MongoDB
+    docs = list(event_custom_fields.find({}, {"_id": 0}))
+    return jsonify({"event_custom_data": docs})
+
+
+# Insert or update a single event at the specified event_id
+@app.post("/event/<int:event_id>/custom-data")
+def add_custom_event_data(event_id):
+    data = request.get_json()
+
+    if not data or "custom_data" not in data:
+        return jsonify({"error": "custom_data is required"}), 400
+
+    custom_data = data["custom_data"]
+
+    youthGroupConnection = None
+    ygc = None
+
+    try:
+        youthGroupConnection = get_connection()
+        # Ensure the connection exists
+        if youthGroupConnection is None:
+            return jsonify({"error": "Could not connect to MySQL"}), 500
+        ygc = youthGroupConnection.cursor()
+
+        # Ensure event doesn't already exist
+        ygc.execute("SELECT type FROM Event WHERE eventId = %s", (event_id,))
+        row = ygc.fetchone()
+
+        # Insert into MySQL
+        if not row:
+            # If the event isn't found, it must be created
+            if "event_type_id" not in custom_data:
+                return jsonify({
+                    "error": "Event not found. Provide event_type_id to create it."
+                }), 400
+
+            event_type_id = custom_data["event_type_id"]
+
+            # Insert event to the event table
+            ygc.execute("""
+                INSERT INTO Event (eventId, eventName, type, startDateTime)
+                VALUES (%s, %s, %s, NOW())
+            """, (event_id, f"Event {event_id}", event_type_id))
+
+            youthGroupConnection.commit()
+
+        else:
+            event_type_id = row[0]
+
+    except Exception as e:
+        return jsonify({"error": f"MySQL operation failed: {str(e)}"}), 500
+
+    finally:
+        if ygc:
+            ygc.close()
+        if youthGroupConnection:
+            youthGroupConnection.close()
+
+    # Insert into Mongo DB
+    try:
+        doc = {
+            "eventId": event_id,
+            "eventTypeId": event_type_id,
+            "custom_data": custom_data
+        }
+        event_custom_fields.insert_one(doc)
+
+    except Exception as e:
+        return jsonify({"error": f"MongoDB insert failed: {str(e)}"}), 500
+
+    return jsonify({
+        "message": "Custom event data saved",
+        "eventId": event_id,
+        "eventTypeId": event_type_id,
+        "custom_data": custom_data
+    }), 201
 
 
 # Run app -----------------------------------------------------------------------------------

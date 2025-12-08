@@ -18,13 +18,14 @@ r = get_redis_connection()
 # This will let us keep our user information private by reading it from an external file.
 load_dotenv()
 
+
 # Try-Except block to print an error message instead of crashing the program
 # From Zybook
 def get_connection():
-    youthGroupConnection = None
+    youth_group_connection = None
 
     try:
-        youthGroupConnection = mysql.connector.connect(
+        youth_group_connection = mysql.connector.connect(
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
             host=os.getenv('DB_HOST'),
@@ -38,15 +39,18 @@ def get_connection():
             print('Database not found')
         else:
             print('Cannot connect to database:', err)
-    
-    return youthGroupConnection
+
+    return youth_group_connection
+
 
 # API
 app = Flask(__name__)
 
+
 @app.get("/ping")
 def ping():
     return "pong"
+
 
 # MYSQL ENDPOINTS ---------------------------------------------------------------------------
 
@@ -54,6 +58,7 @@ def ping():
 def read_root():
     # FILL THIS OUT
     return "root"
+
 
 @app.get("/people")
 def get_people():
@@ -65,6 +70,7 @@ def get_people():
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/events")
 def get_events():
     youthGroupConnection = get_connection()
@@ -75,6 +81,7 @@ def get_events():
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/smallgroups")
 def get_smallgroups():
     youthGroupConnection = get_connection()
@@ -84,6 +91,7 @@ def get_smallgroups():
     youthGroupCursor.close()
     youthGroupConnection.close()
     return jsonify(rows)
+
 
 @app.get("/students")
 def get_students():
@@ -100,6 +108,7 @@ def get_students():
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/parents")
 def get_parents():
     youthGroupConnection = get_connection()
@@ -115,6 +124,7 @@ def get_parents():
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/upcoming-events")
 def get_upcoming_events():
     youthGroupConnection = get_connection()
@@ -124,6 +134,7 @@ def get_upcoming_events():
     ygc.close()
     youthGroupConnection.close()
     return jsonify(rows)
+
 
 @app.get("/student/<int:student_id>/parents")
 def get_student_parents(student_id):
@@ -140,6 +151,7 @@ def get_student_parents(student_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/parent/<int:parent_id>/children")
 def get_parent(parent_id):
     youthGroupConnection = get_connection()
@@ -154,6 +166,7 @@ def get_parent(parent_id):
     ygc.close()
     youthGroupConnection.close()
     return jsonify(rows)
+
 
 @app.get("/smallgroup/<int:group_id>/members")
 def get_smallgroup_members(group_id):
@@ -170,6 +183,7 @@ def get_smallgroup_members(group_id):
     youthGroupConnection.close()
     return jsonify(rows)
 
+
 @app.get("/event/<int:event_id>/registrations")
 def get_event_registrations(event_id):
     youthGroupConnection = get_connection()
@@ -184,6 +198,7 @@ def get_event_registrations(event_id):
     ygc.close()
     youthGroupConnection.close()
     return jsonify(rows)
+
 
 @app.get("/event/<int:event_id>/attendances")
 def get_event_attendances(event_id):
@@ -406,6 +421,7 @@ def get_person_registrations(person_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 # REDIS ENDPOINTS ---------------------------------------------------------------------------
 
 @app.get("/event/<int:event_id>/checkin/status")
@@ -422,6 +438,7 @@ def get_event_checkin_status(event_id):
         "student_Ids": sorted(list(checked_in_Ids)),
         "check_in_times": check_in_times,
     })
+
 
 @app.post("/event/<int:event_id>/checkin/<int:student_id>")
 def checkin_student(event_id, student_id):
@@ -453,6 +470,7 @@ def checkin_student(event_id, student_id):
     # fetch the primary key data from redis, then use that to run a sql query with the field specified
     # what you return should match the stuff specified in the pydantic models
 
+
 @app.post("/event/<int:event_id>/checkout/<int:student_id>")
 def checkout_student(event_id, student_id):
     """Check out a student from an event using Redis"""
@@ -482,6 +500,7 @@ def checkout_student(event_id, student_id):
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.post("/event/<int:event_id>/finalize")
 def finalize_event_attendance(event_id):
@@ -676,6 +695,7 @@ def get_live_dashboard():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 # MONGO ENDPOINTS ---------------------------------------------------------------------------
 
 # Get all event type schemas
@@ -685,12 +705,14 @@ def get_all_event_type_schemas():
     docs = list(event_type_schemas.find({}, {"_id": 0}))
     return jsonify({"event_types": docs})
 
+
 # Get all individual events
 @app.get("/events/custom-data")
 def get_all_event_custom_data():
     # Fetch all custom event data documents from MongoDB
     docs = list(event_custom_fields.find({}, {"_id": 0}))
     return jsonify({"event_custom_data": docs})
+
 
 # Insert or update a single event at the specified event_id
 @app.post("/event/<int:event_id>/custom-data")
@@ -716,7 +738,7 @@ def add_custom_event_data(event_id):
         ygc.execute("SELECT type FROM Event WHERE eventId = %s", (event_id,))
         row = ygc.fetchone()
 
-        #Insert into MySQL
+        # Insert into MySQL
         if not row:
             # If the event isn't found, it must be created
             if "event_type_id" not in custom_data:
@@ -765,8 +787,6 @@ def add_custom_event_data(event_id):
         "custom_data": custom_data
     }), 201
 
-
-    
 
 # Run app -----------------------------------------------------------------------------------
 

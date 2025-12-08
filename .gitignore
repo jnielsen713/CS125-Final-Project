@@ -2,5 +2,8 @@
 .env
 # Folder with private information
 secrets
-
+# IDE configuration files
+.idea/
+# Python cache files
+*.pyc
 __pycache__/

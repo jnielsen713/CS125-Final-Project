@@ -642,7 +642,7 @@ def get_live_dashboard():
                 youthGroupConnection = get_connection()
                 ygc = youthGroupConnection.cursor()
                 ygc.execute("""
-                            SELECT e.eventId, e.eventName, e.startDateTime, e.location, e.type
+                            SELECT e.eventId, e.eventName, e.startDateTime, e.location, e.eventTypeId
                             FROM Event e
                             WHERE e.eventId = %s;
                             """, (event_id,))

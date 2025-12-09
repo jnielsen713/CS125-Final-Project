@@ -1,5 +1,8 @@
 # Environment variables (private info)
 python/.env
+venv/
+.venv/
+env/
 # Folder with private information
 secrets
 # pycache

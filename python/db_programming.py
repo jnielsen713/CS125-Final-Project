@@ -733,7 +733,7 @@ def add_custom_event_data(event_id):
         ygc = youthGroupConnection.cursor()
 
         # Ensure event doesn't already exist
-        ygc.execute("SELECT type FROM Event WHERE eventId = %s", (event_id,))
+        ygc.execute("SELECT eventTypeId FROM Event WHERE eventId = %s", (event_id,))
         row = ygc.fetchone()
 
         # Insert into MySQL
@@ -748,8 +748,8 @@ def add_custom_event_data(event_id):
 
             # Insert event to the event table
             ygc.execute("""
-                INSERT INTO Event (eventId, eventName, type, startDateTime)
-                VALUES (%s, %s, %s, NOW())
+                INSERT INTO Event (eventId, eventName, eventTypeId, startDateTime, location)
+                VALUES (%s, %s, %s, NOW(), 'TBD')
             """, (event_id, f"Event {event_id}", event_type_id))
 
             youthGroupConnection.commit()

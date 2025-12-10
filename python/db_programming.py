@@ -13,36 +13,14 @@ from redis_connection import get_redis_connection
 from datetime import datetime
 
 from strawberry.flask.views import GraphQLView
+from graphql_schema import schema
+from mysql_connection import get_connection
 
 m = get_mongo_connection()
 r = get_redis_connection()
 
 # This will let us keep our user information private by reading it from an external file.
 load_dotenv()
-
-
-# Try-Except block to print an error message instead of crashing the program
-# From Zybook
-def get_connection():
-    youth_group_connection = None
-    try:
-        youth_group_connection = mysql.connector.connect(
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASSWORD'),
-            host=os.getenv('DB_HOST'),
-            port=os.getenv('DB_PORT', 3306),
-            database=os.getenv('DB_NAME'))
-
-    except mysql.connector.Error as err:
-        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-            print('Invalid credentials')
-        elif err.errno == errorcode.ER_BAD_DB_ERROR:
-            print('Database not found')
-        else:
-            print('Cannot connect to database:', err)
-
-    return youth_group_connection
-
 
 # API
 app = Flask(__name__)
@@ -832,6 +810,18 @@ def add_custom_event_data(event_id):
         "custom_data": custom_data
     }), 201
 
+
+# ============================================================================
+# GRAPHQL ENDPOINT
+# ============================================================================
+
+app.add_url_rule(
+    "/graphql",
+    view_func=GraphQLView.as_view("graphql_view", schema=schema, graphiql=True)
+)
+
+# The graphiql=True parameter enables GraphiQL - an interactive GraphQL playground
+# Access it at: http://localhost:5000/graphql
 
 # Run app -----------------------------------------------------------------------------------
 

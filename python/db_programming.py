@@ -8,9 +8,10 @@ import os
 from flask import Flask, jsonify, request
 
 # Redis connection
-from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields
+from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields, event_notes_collection
 from redis_connection import get_redis_connection
 from datetime import datetime
+import uuid
 
 from strawberry.flask.views import GraphQLView
 from graphql_schema import schema
@@ -53,7 +54,7 @@ def get_people():
 def get_events():
     youthGroupConnection = get_connection()
     youthGroupCursor = youthGroupConnection.cursor()
-    youthGroupCursor.execute("SELECT eventName, startDateTime, location FROM Event;")
+    youthGroupCursor.execute("SELECT eventId, eventName, startDateTime, location FROM Event;")
     rows = youthGroupCursor.fetchall()
     youthGroupCursor.close()
     youthGroupConnection.close()
@@ -700,6 +701,13 @@ def get_all_event_custom_data():
     docs = list(event_custom_fields.find({}, {"_id": 0}))
     return jsonify({"event_custom_data": docs})
 
+# Get all event notes for a particular event
+@app.get("/event/<int:event_id>/notes")
+def get_event_notes(event_id):
+    # Fetch all notes for a specific event from MongoDB
+    docs = list(event_notes_collection.find({"event_id": event_id}, {"_id": 0}))
+    return jsonify({"event_notes": docs})
+
 
 # Insert or update a single event at the specified event_id
 # Insert or update a single event at the specified event_id
@@ -884,9 +892,69 @@ def create_or_update_event_type():
     }), 201
 
 
-# ============================================================================
-# GRAPHQL ENDPOINT
-# ============================================================================
+@app.post("/event/<int:event_id>/notes")
+def add_or_update_event_note(event_id):
+    data = request.get_json()
+
+    if not data or "content" not in data:
+        return jsonify({"error": "Note content is required"}), 400
+
+    note_id = data.get("noteId")   # optional → determines add vs update
+
+    if note_id is None:
+        # ---------- ADD NEW NOTE ----------
+        note_id = str(uuid.uuid4())
+        note = {
+            "noteId": note_id,
+            "author": data.get("author", "Unknown"),
+            "timestamp": datetime.now().isoformat(),
+            "content": data["content"],
+            "tags": data.get("tags", [])
+        }
+
+        event_notes_collection.update_one(
+            {"event_id": event_id},
+            {"$push": {"notes": note}},
+            upsert=True
+        )
+
+        return jsonify({
+            "message": "New note added",
+            "eventId": event_id,
+            "note": note
+        }), 201
+
+    else:
+        # ---------- UPDATE EXISTING NOTE ----------
+        # update only specific fields
+        update_fields = {
+            "notes.$.content": data["content"],
+            "notes.$.tags": data.get("tags", []),
+            "notes.$.timestamp": datetime.now().isoformat()
+        }
+
+        if "author" in data:
+            update_fields["notes.$.author"] = data["author"]
+
+        result = event_notes_collection.update_one(
+            {"event_id": event_id, "notes.noteId": note_id},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({
+                "error": f"No existing note found with noteId {note_id}"
+            }), 404
+
+        return jsonify({
+            "message": "Note updated",
+            "eventId": event_id,
+            "noteId": note_id
+        }), 200
+
+
+
+# GraphQL ENDPOINTS ---------------------------------------------------------------------------
 
 app.add_url_rule(
     "/graphql",

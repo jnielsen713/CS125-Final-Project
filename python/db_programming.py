@@ -719,7 +719,10 @@ def get_all_event_custom_data():
 def add_custom_event_data(event_id):
     data = request.get_json()
 
-    if not data or "custom_data" not in data:
+    if not data:
+        return jsonify({"error": "JSON body is required"}), 400
+
+    if "custom_data" not in data:
         return jsonify({"error": "custom_data is required"}), 400
 
     custom_data = data["custom_data"]
@@ -729,34 +732,41 @@ def add_custom_event_data(event_id):
 
     try:
         youthGroupConnection = get_connection()
-        # Ensure the connection exists
         if youthGroupConnection is None:
             return jsonify({"error": "Could not connect to MySQL"}), 500
+
         ygc = youthGroupConnection.cursor()
 
-        # Ensure event doesn't already exist
+        # Check if the event already exists
         ygc.execute("SELECT eventTypeId FROM Event WHERE eventId = %s", (event_id,))
         row = ygc.fetchone()
 
-        # Insert into MySQL
         if not row:
-            # If the event isn't found, it must be created
-            if "event_type_id" not in custom_data:
+            # --- Creating a NEW Event ---
+            # Validate needed MySQL event fields
+            required_fields = ["event_type_id", "event_name", "startDateTime", "location"]
+            missing = [field for field in required_fields if field not in data]
+
+            if missing:
                 return jsonify({
-                    "error": "Event not found. Provide event_type_id to create it."
+                    "error": f"Missing required fields to create event: {missing}"
                 }), 400
 
-            event_type_id = custom_data["event_type_id"]
+            event_type_id = data["event_type_id"]
+            event_name = data["event_name"]
+            start_dt = data["startDateTime"]
+            location = data["location"]
 
-            # Insert event to the event table
+            # Insert into MySQL
             ygc.execute("""
                 INSERT INTO Event (eventId, eventName, eventTypeId, startDateTime, location)
-                VALUES (%s, %s, %s, NOW(), 'TBD')
-            """, (event_id, f"Event {event_id}", event_type_id))
+                VALUES (%s, %s, %s, %s, %s)
+            """, (event_id, event_name, event_type_id, start_dt, location))
 
             youthGroupConnection.commit()
 
         else:
+            # --- Event ALREADY exists ---
             event_type_id = row[0]
 
     except Exception as e:
@@ -768,7 +778,7 @@ def add_custom_event_data(event_id):
         if youthGroupConnection:
             youthGroupConnection.close()
 
-    # Insert into Mongo DB
+    # Save custom data to MongoDB
     try:
         doc = {
             "eventId": event_id,
@@ -781,12 +791,18 @@ def add_custom_event_data(event_id):
         return jsonify({"error": f"MongoDB insert failed: {str(e)}"}), 500
 
     return jsonify({
-        "message": "Custom event data saved",
+        "message": "Event + custom data saved successfully",
         "eventId": event_id,
         "eventTypeId": event_type_id,
+        "mysql_event": {
+            "event_name": data.get("event_name"),
+            "startDateTime": data.get("startDateTime"),
+            "location": data.get("location")
+        },
         "custom_data": custom_data
     }), 201
 
+# GRAPHQL ENDPOINT ---------------------------------------------------------------------------
 
 try:
     # We defer the schema import until here to break the circular dependency.

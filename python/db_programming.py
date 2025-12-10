@@ -737,27 +737,23 @@ def add_custom_event_data(event_id):
 
         ygc = youthGroupConnection.cursor()
 
-        # Check if the event already exists
+        # Check if the event exists
         ygc.execute("SELECT eventTypeId FROM Event WHERE eventId = %s", (event_id,))
         row = ygc.fetchone()
 
         if not row:
-            # --- Creating a NEW Event ---
-            # Validate needed MySQL event fields
+            # --- NEW EVENT CREATION ---
             required_fields = ["event_type_id", "event_name", "startDateTime", "location"]
             missing = [field for field in required_fields if field not in data]
 
             if missing:
-                return jsonify({
-                    "error": f"Missing required fields to create event: {missing}"
-                }), 400
+                return jsonify({"error": f"Missing required fields: {missing}"}), 400
 
             event_type_id = data["event_type_id"]
             event_name = data["event_name"]
             start_dt = data["startDateTime"]
             location = data["location"]
 
-            # Insert into MySQL
             ygc.execute("""
                 INSERT INTO Event (eventId, eventName, eventTypeId, startDateTime, location)
                 VALUES (%s, %s, %s, %s, %s)
@@ -766,8 +762,39 @@ def add_custom_event_data(event_id):
             youthGroupConnection.commit()
 
         else:
-            # --- Event ALREADY exists ---
-            event_type_id = row[0]
+            # --- EVENT EXISTS → OVERWRITE SQL FIELDS IF PROVIDED ---
+            event_type_id = data.get("event_type_id", row[0])
+
+            event_name = data.get("event_name")
+            start_dt = data.get("startDateTime")
+            location = data.get("location")
+
+            update_fields = []
+            sql_values = []
+
+            if event_name:
+                update_fields.append("eventName = %s")
+                sql_values.append(event_name)
+
+            if start_dt:
+                update_fields.append("startDateTime = %s")
+                sql_values.append(start_dt)
+
+            if location:
+                update_fields.append("location = %s")
+                sql_values.append(location)
+
+            if "event_type_id" in data:
+                update_fields.append("eventTypeId = %s")
+                sql_values.append(event_type_id)
+
+            if update_fields:
+                sql_values.append(event_id)
+                ygc.execute(
+                    f"UPDATE Event SET {', '.join(update_fields)} WHERE eventId = %s",
+                    tuple(sql_values)
+                )
+                youthGroupConnection.commit()
 
     except Exception as e:
         return jsonify({"error": f"MySQL operation failed: {str(e)}"}), 500
@@ -778,29 +805,33 @@ def add_custom_event_data(event_id):
         if youthGroupConnection:
             youthGroupConnection.close()
 
-    # Save custom data to MongoDB
+    # --- MONGODB: Replace existing custom_data for this event ---
     try:
+        event_custom_fields.delete_many({"eventId": event_id})
+
         doc = {
             "eventId": event_id,
             "eventTypeId": event_type_id,
             "custom_data": custom_data
         }
+
         event_custom_fields.insert_one(doc)
 
     except Exception as e:
-        return jsonify({"error": f"MongoDB insert failed: {str(e)}"}), 500
+        return jsonify({"error": f"MongoDB operation failed: {str(e)}"}), 500
 
     return jsonify({
-        "message": "Event + custom data saved successfully",
+        "message": "Event and custom data saved (overwrite if existed)",
         "eventId": event_id,
         "eventTypeId": event_type_id,
-        "mysql_event": {
+        "sql_updates": {
             "event_name": data.get("event_name"),
             "startDateTime": data.get("startDateTime"),
             "location": data.get("location")
         },
         "custom_data": custom_data
     }), 201
+
 
 # GRAPHQL ENDPOINT ---------------------------------------------------------------------------
 

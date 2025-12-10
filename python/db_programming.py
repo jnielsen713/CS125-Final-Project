@@ -59,6 +59,15 @@ def get_events():
     youthGroupConnection.close()
     return jsonify(rows)
 
+@app.get("/event-types")
+def get_event_types():
+    youthGroupConnection = get_connection()
+    youthGroupCursor = youthGroupConnection.cursor()
+    youthGroupCursor.execute("SELECT eventTypeId, name FROM EventType;")
+    rows = youthGroupCursor.fetchall()
+    youthGroupCursor.close()
+    youthGroupConnection.close()
+    return jsonify(rows)
 
 @app.get("/smallgroups")
 def get_smallgroups():
@@ -677,7 +686,7 @@ def get_live_dashboard():
 # MONGO ENDPOINTS ---------------------------------------------------------------------------
 
 # Get all event type schemas
-@app.get("/event-types/schemas")
+@app.get("/event-type-schemas")
 def get_all_event_type_schemas():
     # Fetch all documents, hide internal ObjectId
     docs = list(event_type_schemas.find({}, {"_id": 0}))
@@ -693,16 +702,25 @@ def get_all_event_custom_data():
 
 
 # Insert or update a single event at the specified event_id
-@app.post("/event/<int:event_id>/custom-data")
-def add_custom_event_data(event_id):
+# Insert or update a single event at the specified event_id
+@app.post("/event/custom-data")
+def create_or_update_event():
     data = request.get_json()
 
-    if not data:
-        return jsonify({"error": "JSON body is required"}), 400
+    # --- Validate base JSON ---
+    required_sql_fields = ["event_type_id", "event_name", "startDateTime", "location"]
+    missing = [f for f in required_sql_fields if f not in data]
+
+    if missing:
+        return jsonify({"error": f"Missing required fields: {missing}"}), 400
 
     if "custom_data" not in data:
         return jsonify({"error": "custom_data is required"}), 400
 
+    event_type_id = data["event_type_id"]
+    event_name = data["event_name"]
+    start_dt = data["startDateTime"]
+    location = data["location"]
     custom_data = data["custom_data"]
 
     youthGroupConnection = None
@@ -715,64 +733,40 @@ def add_custom_event_data(event_id):
 
         ygc = youthGroupConnection.cursor()
 
-        # Check if the event exists
-        ygc.execute("SELECT eventTypeId FROM Event WHERE eventId = %s", (event_id,))
-        row = ygc.fetchone()
+        # --- Check for existing event by name and start time (your unique constraints may vary) ---
+        ygc.execute("""
+            SELECT eventId FROM Event
+            WHERE eventName = %s AND startDateTime = %s
+        """, (event_name, start_dt))
 
-        if not row:
-            # --- NEW EVENT CREATION ---
-            required_fields = ["event_type_id", "event_name", "startDateTime", "location"]
-            missing = [field for field in required_fields if field not in data]
+        existing = ygc.fetchone()
 
-            if missing:
-                return jsonify({"error": f"Missing required fields: {missing}"}), 400
-
-            event_type_id = data["event_type_id"]
-            event_name = data["event_name"]
-            start_dt = data["startDateTime"]
-            location = data["location"]
+        if existing:
+            # ------------------------------------
+            # UPDATE EXISTING EVENT
+            # ------------------------------------
+            event_id = existing[0]
 
             ygc.execute("""
-                INSERT INTO Event (eventId, eventName, eventTypeId, startDateTime, location)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (event_id, event_name, event_type_id, start_dt, location))
+                UPDATE Event
+                SET eventTypeId = %s, location = %s
+                WHERE eventId = %s
+            """, (event_type_id, location, event_id))
 
             youthGroupConnection.commit()
 
         else:
-            # --- EVENT EXISTS → OVERWRITE SQL FIELDS IF PROVIDED ---
-            event_type_id = data.get("event_type_id", row[0])
+            # ------------------------------------
+            # CREATE NEW EVENT
+            # ------------------------------------
+            ygc.execute("""
+                INSERT INTO Event (eventName, eventTypeId, startDateTime, location)
+                VALUES (%s, %s, %s, %s)
+            """, (event_name, event_type_id, start_dt, location))
 
-            event_name = data.get("event_name")
-            start_dt = data.get("startDateTime")
-            location = data.get("location")
+            youthGroupConnection.commit()
 
-            update_fields = []
-            sql_values = []
-
-            if event_name:
-                update_fields.append("eventName = %s")
-                sql_values.append(event_name)
-
-            if start_dt:
-                update_fields.append("startDateTime = %s")
-                sql_values.append(start_dt)
-
-            if location:
-                update_fields.append("location = %s")
-                sql_values.append(location)
-
-            if "event_type_id" in data:
-                update_fields.append("eventTypeId = %s")
-                sql_values.append(event_type_id)
-
-            if update_fields:
-                sql_values.append(event_id)
-                ygc.execute(
-                    f"UPDATE Event SET {', '.join(update_fields)} WHERE eventId = %s",
-                    tuple(sql_values)
-                )
-                youthGroupConnection.commit()
+            event_id = ygc.lastrowid  # MySQL auto-increment ID
 
     except Exception as e:
         return jsonify({"error": f"MySQL operation failed: {str(e)}"}), 500
@@ -783,31 +777,110 @@ def add_custom_event_data(event_id):
         if youthGroupConnection:
             youthGroupConnection.close()
 
-    # --- MONGODB: Replace existing custom_data for this event ---
+    # ------------------------------------
+    # MONGODB UPSERT (no duplicates)
+    # ------------------------------------
     try:
-        event_custom_fields.delete_many({"eventId": event_id})
-
-        doc = {
-            "eventId": event_id,
-            "eventTypeId": event_type_id,
-            "custom_data": custom_data
-        }
-
-        event_custom_fields.insert_one(doc)
+        event_custom_fields.replace_one(
+            {"eventId": event_id},   # filter
+            {
+                "eventId": event_id,
+                "eventTypeId": event_type_id,
+                "custom_data": custom_data
+            },
+            upsert=True
+        )
 
     except Exception as e:
         return jsonify({"error": f"MongoDB operation failed: {str(e)}"}), 500
 
     return jsonify({
-        "message": "Event and custom data saved (overwrite if existed)",
+        "message": "Event saved (created or updated)",
         "eventId": event_id,
-        "eventTypeId": event_type_id,
-        "sql_updates": {
-            "event_name": data.get("event_name"),
-            "startDateTime": data.get("startDateTime"),
-            "location": data.get("location")
-        },
+        "event_type_id": event_type_id,
+        "event_name": event_name,
+        "startDateTime": start_dt,
+        "location": location,
         "custom_data": custom_data
+    }), 201
+
+
+@app.post("/event-type")
+def create_or_update_event_type():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "JSON body is required"}), 400
+
+    if "name" not in data:
+        return jsonify({"error": "name is required"}), 400
+
+    if "fields" not in data or not isinstance(data["fields"], list):
+        return jsonify({"error": "fields must be a list"}), 400
+
+    name = data["name"]
+    fields = data["fields"]
+
+    youthGroupConnection = None
+    ygc = None
+    event_type_id = None
+
+    try:
+        youthGroupConnection = get_connection()
+        if youthGroupConnection is None:
+            return jsonify({"error": "Could not connect to MySQL"}), 500
+        ygc = youthGroupConnection.cursor()
+
+        # Does an event type with this name already exist?
+        ygc.execute("SELECT eventTypeId FROM EventType WHERE name = %s", (name,))
+        row = ygc.fetchone()
+
+        if not row:
+            # Create a new event type
+            ygc.execute("INSERT INTO EventType (name) VALUES (%s)", (name,))
+            youthGroupConnection.commit()
+
+            event_type_id = ygc.lastrowid
+
+        else:
+            # Overwrite existing event type
+            event_type_id = row[0]
+
+            # OPTIONAL: Update name field if your system allows renaming
+            # ygc.execute("UPDATE EventType SET name = %s WHERE eventTypeId = %s",
+            #             (name, event_type_id))
+
+            youthGroupConnection.commit()
+
+    except Exception as e:
+        return jsonify({"error": f"MySQL operation failed: {str(e)}"}), 500
+
+    finally:
+        if ygc:
+            ygc.close()
+        if youthGroupConnection:
+            youthGroupConnection.close()
+
+    # --- MongoDB: Upsert the schema for this event type ---
+    try:
+        event_type_schemas.update_one(
+            {"event_type_id": event_type_id},   # find existing
+            {"$set": {
+                "event_type_id": event_type_id,
+                "fields": fields
+            }},
+            upsert=True
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"MongoDB operation failed: {str(e)}"}), 500
+
+
+    return jsonify({
+        "message": "Event type saved (new or overwritten)",
+        "event_type_id": event_type_id,
+        "name": name,
+        "fields": fields
     }), 201
 
 

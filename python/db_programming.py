@@ -833,26 +833,6 @@ def add_custom_event_data(event_id):
     }), 201
 
 
-# GRAPHQL ENDPOINT ---------------------------------------------------------------------------
-
-try:
-    # We defer the schema import until here to break the circular dependency.
-    from graphql_schema import schema
-
-    app.add_url_rule(
-        '/graphql',
-        view_func=GraphQLView.as_view(
-            'graphql',
-            schema=schema,
-            graphiql=True
-        )
-    )
-except ImportError as e:
-    print(f"ERROR: Failed to import GraphQL schema. Circular dependency likely: {e}")
-    # You might want to remove the GraphQL endpoint if the import fails
-    pass  # Continue running the rest of the application without the GraphQL endpoint
-
-
 # Run app -----------------------------------------------------------------------------------
 
 if __name__ == "__main__":

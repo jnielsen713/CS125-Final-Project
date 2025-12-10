@@ -954,7 +954,7 @@ def add_or_update_event_note(event_id):
 
 
 
-# GraphQL ENDPOINTS ---------------------------------------------------------------------------
+# GraphQL ENDPOINT ---------------------------------------------------------------------------
 
 app.add_url_rule(
     "/graphql",

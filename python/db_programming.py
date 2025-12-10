@@ -12,6 +12,8 @@ from mongo_connection import get_mongo_connection, event_type_schemas, event_cus
 from redis_connection import get_redis_connection
 from datetime import datetime
 
+from strawberry.flask.views import GraphQLView
+
 m = get_mongo_connection()
 r = get_redis_connection()
 
@@ -784,6 +786,24 @@ def add_custom_event_data(event_id):
         "eventTypeId": event_type_id,
         "custom_data": custom_data
     }), 201
+
+
+try:
+    # We defer the schema import until here to break the circular dependency.
+    from graphql_schema import schema
+
+    app.add_url_rule(
+        '/graphql',
+        view_func=GraphQLView.as_view(
+            'graphql',
+            schema=schema,
+            graphiql=True
+        )
+    )
+except ImportError as e:
+    print(f"ERROR: Failed to import GraphQL schema. Circular dependency likely: {e}")
+    # You might want to remove the GraphQL endpoint if the import fails
+    pass  # Continue running the rest of the application without the GraphQL endpoint
 
 
 # Run app -----------------------------------------------------------------------------------

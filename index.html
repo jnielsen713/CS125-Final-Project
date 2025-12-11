@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Youth Group Manager</title>
+    <title>Youth Group Manager (GraphQL)</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,836 +12,1042 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-      // Define placeholder components for the Lucide icons
-      const Users = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>👥</span>;
-      const Calendar = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>📅</span>;
-      const UserPlus = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>➕</span>;
-      const CheckCircle = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>✅</span>;
-      const ClipboardList = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>📋</span>;
-      const Activity = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>⚡</span>;
-      const Home = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>🏠</span>;
-      const Bell = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>🔔</span>;
-      const Settings = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>⚙️</span>; 
+    // Define placeholder components for the Lucide icons
+    const Users = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>👥</span>;
+    const Calendar = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>📅</span>;
+    const UserPlus = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>➕</span>;
+    const CheckCircle = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>✅</span>;
+    const ClipboardList = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>📋</span>;
+    const Activity = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>⚡</span>;
+    const Home = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>🏠</span>;
+    const Bell = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>🔔</span>;
+    const Settings = (props) => <span {...props} style={{fontSize: props.size/20 + 'em'}}>⚙️</span>; 
+    
+    const { useState, useEffect } = React;
+    
+    const API_BASE = 'http://127.0.0.1:5000';
+    const GRAPHQL_ENDPOINT = `${API_BASE}/graphql`;
+
+    // ************************************************************
+    // GraphQL Fetch Utility
+    // ************************************************************
+    const graphqlFetch = async (query, variables = {}) => {
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`GraphQL network error: ${response.statusText}`);
+      }
       
-      const { useState, useEffect } = React;
-      
-      const API_BASE = 'http://127.0.0.1:5000';
+      const result = await response.json();
 
-      const YouthGroupApp = () => {
-        const [activeView, setActiveView] = useState('dashboard');
-        const [liveData, setLiveData] = useState(null);
-        const [refreshKey, setRefreshKey] = useState(0);
+      if (result.errors) {
+        console.error('GraphQL Errors:', result.errors);
+        throw new Error(result.errors.map(e => e.message).join(' | '));
+      }
 
-        // Fetch live dashboard data
-        useEffect(() => {
-          if (activeView === 'dashboard') {
-            fetchLiveDashboard();
-            const interval = setInterval(fetchLiveDashboard, 5000); // Refresh every 5 seconds
-            return () => clearInterval(interval);
+      // Data will be in result.data
+      return result.data;
+    };
+
+    const YouthGroupApp = () => {
+      const [activeView, setActiveView] = useState('dashboard');
+      const [liveData, setLiveData] = useState(null);
+      const [refreshKey, setRefreshKey] = useState(0);
+
+      // Fetch live dashboard data - REFACTORED TO USE GRAPHQL
+      useEffect(() => {
+        if (activeView === 'dashboard') {
+          fetchLiveDashboard();
+          const interval = setInterval(fetchLiveDashboard, 5000); // Refresh every 5 seconds
+          return () => clearInterval(interval);
+        }
+      }, [activeView, refreshKey]);
+
+      // REFACTORED: Queries the new 'liveDashboard' field for consolidated data.
+      // REFACTORED: Queries the new 'liveDashboard' field for consolidated data.
+    const fetchLiveDashboard = async () => {
+      // NOTE: The query below is completely clean, without any comments inside the backticks.
+      const query = `
+        query LiveDashboardQuery {
+          liveDashboard { 
+            numberOfActiveEvents 
+            totalPeopleAcrossAllEvents 
+            activeEvents { 
+              eventId
+              eventName
+              location
+              startTime
+              currentAttendance
+              students {
+                personId 
+                firstName 
+                lastName 
+              }
+            }
           }
-        }, [activeView, refreshKey]);
+        }
+      `;
+      try {
+        const data = await graphqlFetch(query);
+        // FIX: Set data directly from the liveDashboard field
+        setLiveData(data.liveDashboard); 
+      } catch (err) {
+        console.error('Error fetching live dashboard:', err);
+      }
+    };
 
-        const fetchLiveDashboard = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/dashboard/live`);
-            const data = await res.json();
-            setLiveData(data);
-          } catch (err) {
-            console.error('Error fetching live dashboard:', err);
-          }
-        };
+      const NavButton = ({ icon: Icon, label, view }) => (
+        <button onClick={() => setActiveView(view)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+            activeView === view
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'bg-white text-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <Icon size={20} />
+          <span className="font-medium">{label}</span>
+        </button>
+      );
 
-        const NavButton = ({ icon: Icon, label, view }) => (
-          <button onClick={() => setActiveView(view)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              activeView === view
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'bg-white text-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            <Icon size={20} />
-            <span className="font-medium">{label}</span>
-          </button>
-        );
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50">
+          {/* Header */}
+          <header className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg">
+            <div className="container mx-auto px-6 py-4">
+              <h1 className="text-3xl font-bold">Youth Group Manager (GraphQL)</h1>
+              <p className="text-blue-100 text-sm">Empowering youth ministry through technology</p>
+            </div>
+          </header>
 
+          {/* Navigation */}
+          <nav className="bg-white shadow-md border-b-2 border-blue-100">
+            <div className="container mx-auto px-6 py-4">
+              <div className="flex flex-wrap gap-3">
+                <NavButton icon={Home} label="Dashboard" view="dashboard" />
+                <NavButton icon={Users} label="Students" view="students" />
+                <NavButton icon={UserPlus} label="Parents" view="parents" />
+                <NavButton icon={Calendar} label="Events" view="events" />
+                <NavButton icon={CheckCircle} label="Check-In" view="checkin" />
+                <NavButton icon={ClipboardList} label="Small Groups" view="groups" />
+                <NavButton icon={Bell} label="Event Notes" view="notes" />
+                <NavButton icon={Settings} label="Event Config" view="event-config" /> 
+              </div>
+            </div>
+          </nav>
+
+          {/* Main Content */}
+          <main className="container mx-auto px-6 py-8">
+            {activeView === 'dashboard' && <DashboardView liveData={liveData} />}
+            {activeView === 'students' && <StudentsView />}
+            {activeView === 'parents' && <ParentsView />}
+            {activeView === 'events' && <EventsView />}
+            {activeView === 'checkin' && <CheckInView onRefresh={() => setRefreshKey(k => k + 1)} />}
+            {activeView === 'groups' && <SmallGroupsView />}
+            {activeView === 'notes' && <EventNotesView />}
+            {activeView === 'event-config' && <EventConfigView />}
+          </main>
+
+          {/* Footer */}
+          <footer className="bg-gray-800 text-white p-4 mt-8 text-center text-sm">
+            &copy; {new Date().getFullYear()} Youth Group Manager. All rights reserved.
+          </footer>
+        </div>
+      );
+    };
+
+    // ************************************************************
+    // Dashboard View
+    // ************************************************************
+    const DashboardView = ({ liveData }) => {
+      if (!liveData) {
         return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50">
-            {/* Header */}
-            <header className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg">
-              <div className="container mx-auto px-6 py-4">
-                <h1 className="text-3xl font-bold">Youth Group Manager</h1>
-                <p className="text-blue-100 text-sm">Empowering youth ministry through technology</p>
-              </div>
-            </header>
-
-            {/* Navigation */}
-            <nav className="bg-white shadow-md border-b-2 border-blue-100">
-              <div className="container mx-auto px-6 py-4">
-                <div className="flex flex-wrap gap-3">
-                  <NavButton icon={Home} label="Dashboard" view="dashboard" />
-                  <NavButton icon={Users} label="Students" view="students" />
-                  <NavButton icon={UserPlus} label="Parents" view="parents" />
-                  <NavButton icon={Calendar} label="Events" view="events" />
-                  <NavButton icon={CheckCircle} label="Check-In" view="checkin" />
-                  <NavButton icon={ClipboardList} label="Small Groups" view="groups" />
-                  <NavButton icon={Bell} label="Event Notes" view="notes" />
-                  <NavButton icon={Settings} label="Event Config" view="event-config" /> 
-                </div>
-              </div>
-            </nav>
-
-            {/* Main Content */}
-            <main className="container mx-auto px-6 py-8">
-              {activeView === 'dashboard' && <DashboardView liveData={liveData} />}
-              {activeView === 'students' && <StudentsView />}
-              {activeView === 'parents' && <ParentsView />}
-              {activeView === 'events' && <EventsView onRefresh={() => setRefreshKey(k => k + 1)} />}
-              {activeView === 'checkin' && <CheckInView onRefresh={() => setRefreshKey(k => k + 1)} />}
-              {activeView === 'groups' && <SmallGroupsView />}
-              {activeView === 'notes' && <EventNotesView />}
-              {activeView === 'event-config' && <EventTypesView />} 
-            </main>
+          <div className="text-center py-10">
+            <Activity className="text-blue-600 mx-auto animate-spin" size={48} />
+            <p className="mt-4 text-lg text-gray-600">Loading live dashboard data...</p>
           </div>
         );
-      };
+      }
+      
+      // FIX: Access fields using camelCase as returned by GraphQL
+      const numberOfActiveEvents = liveData.numberOfActiveEvents;
+      const totalPeopleAcrossAllEvents = liveData.totalPeopleAcrossAllEvents;
 
-      // Dashboard View (Unchanged)
-      const DashboardView = ({ liveData }) => {
-        return (
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Activity className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Live Dashboard</h2>
+          </div>
+          
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <div className="flex items-center gap-3 mb-4">
-                <Activity className="text-blue-600" size={32} />
-                <h2 className="text-2xl font-bold text-gray-800">Live Dashboard</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Active Events Card */}
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+                <div className="text-sm opacity-80 font-medium">Active Events</div>
+                <div className="text-4xl font-extrabold mt-1">{numberOfActiveEvents}</div>
+                <Calendar className="absolute bottom-4 right-4 opacity-20" size={48} />
               </div>
-              
-              {liveData ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
-                      <div className="text-3xl font-bold">{liveData.number_of_active_events || 0}</div>
-                      <div className="text-blue-100">Active Events</div>
+
+              {/* Total Attendees Card */}
+              <div className="bg-gradient-to-br from-cyan-500 to-teal-600 rounded-lg p-6 text-white shadow-lg">
+                <div className="text-sm opacity-80 font-medium">Total Checked In</div>
+                <div className="text-4xl font-extrabold mt-1">{totalPeopleAcrossAllEvents}</div>
+                <Users className="absolute bottom-4 right-4 opacity-20" size={48} />
+              </div>
+
+              {/* Placeholder Card */}
+              <div className="bg-gradient-to-br from-gray-300 to-gray-400 rounded-lg p-6 text-gray-800 shadow-lg">
+                <div className="text-sm opacity-80 font-medium">Coming Soon</div>
+                <div className="text-4xl font-extrabold mt-1">N/A</div>
+                <Settings className="absolute bottom-4 right-4 opacity-20" size={48} />
+              </div>
+            </div>
+
+            {/* Live Events Table */}
+            <h3 className="text-xl font-bold text-gray-800 pt-4">Current Live Events ({liveData.activeEvents.length})</h3>
+            <div className="space-y-4">
+              {liveData.activeEvents.length > 0 ? (
+                liveData.activeEvents.map(event => (
+                  <div key={event.eventId} className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="text-lg font-bold text-blue-600">{event.eventName}</h4>
+                        <p className="text-sm text-gray-500">{event.location} &bull; {event.startTime ? new Date(event.startTime).toLocaleString() : 'N/A'}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+                          {event.currentAttendance} Checked In
+                        </span>
+                      </div>
                     </div>
-                    <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg p-6 text-white">
-                      <div className="text-3xl font-bold">{liveData.total_people_across_all_events || 0}</div>
-                      <div className="text-cyan-100">Total Attendees</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg p-6 text-white">
-                      <div className="text-3xl font-bold">{new Date().toLocaleTimeString()}</div>
-                      <div className="text-teal-100">Current Time</div>
+                    
+                    {/* Student List (now correctly populated via LiveDashboardData) */}
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
+                      {event.students && event.students.length > 0 ? (
+                        event.students.map(student => (
+                          <span key={student.personId} className="bg-white px-3 py-1 rounded-full text-sm text-gray-700 border border-blue-200 shadow-sm">
+                            {/* FIX: Use camelCase properties for rendering */}
+                            {student.firstName} {student.lastName}
+                          </span>
+                        ))
+                      ) : (
+                          <p className="text-xs text-gray-500 italic">No students checked in yet.</p>
+                      )}
                     </div>
                   </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-8">No events currently active.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
 
-                  {liveData.active_events && liveData.active_events.length > 0 ? (
-                    <div className="space-y-4">
-                      <h3 className="text-xl font-semibold text-gray-800">Currently Active Events</h3>
-                      {liveData.active_events.map(event => (
-                        <div key={event.event_id} className="bg-blue-50 rounded-lg p-4 border-l-4 border-blue-500">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className="text-lg font-bold text-gray-800">{event.event_name}</h4>
-                              <p className="text-sm text-gray-600">{event.location}</p>
-                              <p className="text-xs text-gray-500">Started: {new Date(event.start_time).toLocaleString()}</p>
-                            </div>
-                            <div className="bg-blue-600 text-white px-4 py-2 rounded-full font-bold">
-                              {event.current_attendance} checked in
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {event.students.map(student => (
-                              <span key={student.id} className="bg-white px-3 py-1 rounded-full text-sm text-gray-700 border border-blue-200">
-                                {student.name}
-                              </span>
-                            ))}
-                          </div>
+    // ************************************************************
+    // Students View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const StudentsView = () => {
+      const [students, setStudents] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [selectedStudent, setSelectedStudent] = useState(null);
+      const [parents, setParents] = useState([]);
+
+      useEffect(() => {
+        fetchStudents();
+      }, []);
+
+      const fetchStudents = async () => {
+        setLoading(true);
+        const query = `
+          query AllStudents {
+            students {
+              personId
+              firstName
+              lastName
+              email
+              phone
+              birthday
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          // FIX: Mapping is not strictly needed if fields match camelCase, but ensure access
+          setStudents(data.students || []); 
+        } catch (err) {
+          console.error('Error fetching students:', err);
+        }
+        setLoading(false);
+      };
+
+      const viewStudentParents = async (studentId) => {
+        setParents([]);
+        // NOTE: Assuming studentParents resolver exists on Query
+        const query = ` 
+          query StudentParents($id: Int!) {
+            studentParents(studentId: $id) { argument
+              personId
+              firstName
+              lastName
+              email
+              phone
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: studentId });
+          setParents(data.studentParents || []);
+          setSelectedStudent(studentId);
+        } catch (err) {
+          console.error('Error fetching parents:', err);
+        }
+      };
+      
+      // ... (rest of StudentsView rendering logic)
+      // NOTE: Student list rendering must use personId, firstName, lastName etc.
+      const selectedStudentData = students.find(s => s.personId === selectedStudent);
+      // ...
+      // ...
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Users className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Students ({students.length})</h2>
+          </div>
+          
+          {loading ? (
+            <p className="text-center py-8 text-gray-500">Loading...</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Student List */}
+              <div className="lg:col-span-2">
+                <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-4">
+                  {students.map(student => (
+                    <div key={student.personId} 
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        student.personId === selectedStudent ? 'bg-blue-100 border-blue-400 shadow-md' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      onClick={() => viewStudentParents(student.personId)}
+                    >
+                      <div className="font-semibold text-gray-800">{student.firstName} {student.lastName}</div>
+                      <div className="text-sm text-gray-500">{student.email}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Detail/Parents Panel */}
+              <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
+                <h3 className="text-xl font-bold text-gray-800 mb-3">Student Details</h3>
+                {selectedStudentData ? (
+                  <div className="space-y-3">
+                    <p className="font-semibold">{selectedStudentData.firstName} {selectedStudentData.lastName}</p>
+                    <p className="text-sm">Email: {selectedStudentData.email}</p>
+                    <p className="text-sm">Phone: {selectedStudentData.phone}</p>
+                    <p className="text-sm">Birthday: {selectedStudentData.birthday || 'N/A'}</p>
+                    
+                    <h4 className="font-bold pt-3 border-t mt-3">Parents ({parents.length})</h4>
+                    <div className="space-y-2">
+                      {parents.map(parent => (
+                        <div key={parent.personId} className="p-3 bg-white rounded-lg border border-gray-200">
+                          <p className="font-semibold text-sm">{parent.firstName} {parent.lastName}</p>
+                          <p className="text-xs text-gray-600">{parent.phone}</p>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className="text-center py-12 text-gray-500">
-                      <Activity size={48} className="mx-auto mb-4 opacity-50" />
-                      <p className="text-lg">No active events right now</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">Select a student to view details.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+    
+    // ************************************************************
+    // Parents View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const ParentsView = () => {
+      const [parents, setParents] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [selectedParent, setSelectedParent] = useState(null);
+      const [children, setChildren] = useState([]);
+
+      useEffect(() => {
+        fetchParents();
+      }, []);
+
+      const fetchParents = async () => {
+        setLoading(true);
+        const query = `
+          query AllParents {
+            people { # Assuming all people are fetched and filtered on client or server
+              personId
+              firstName
+              lastName
+              email
+              phone
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          // FIX: Mapping is not strictly needed if fields match camelCase, but ensure access
+          const formattedParents = (data.people || []).map(p => ({
+              id: p.personId,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              email: p.email,
+              phone: p.phone,
+          }));
+          setParents(formattedParents);
+        } catch (err) {
+          console.error('Error fetching parents:', err);
+        }
+        setLoading(false);
+      };
+
+      const viewParentChildren = async (parentId) => {
+        setChildren([]);
+        // NOTE: Assuming parentChildren resolver exists on Query
+        const query = `
+          query ParentChildren($id: Int!) {
+            parentChildren(parentId: $id) { argument
+              personId
+              firstName
+              lastName
+              email
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: parentId });
+          setChildren(data.parentChildren || []);
+          setSelectedParent(parentId);
+        } catch (err) {
+          console.error('Error fetching children:', err);
+        }
+      };
+
+      // ... (rest of ParentsView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <UserPlus className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Parents ({parents.length})</h2>
+          </div>
+          
+          {loading ? (
+            <p className="text-center py-8 text-gray-500">Loading...</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Parent List */}
+              <div className="lg:col-span-2">
+                <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-4">
+                  {parents.map(parent => (
+                    <div key={parent.id} 
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        parent.id === selectedParent ? 'bg-blue-100 border-blue-400 shadow-md' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      onClick={() => viewParentChildren(parent.id)}
+                    >
+                      <div className="font-semibold text-gray-800">{parent.firstName} {parent.lastName}</div>
+                      <div className="text-sm text-gray-500">{parent.email}</div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading live data...</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      };
-
-      // Students View (Unchanged)
-      const StudentsView = () => {
-        const [students, setStudents] = useState([]);
-        const [selectedStudent, setSelectedStudent] = useState(null);
-        const [parents, setParents] = useState([]);
-        const [loading, setLoading] = useState(true);
-
-        useEffect(() => {
-          fetchStudents();
-        }, []);
-
-        const fetchStudents = async () => {
-          setLoading(true);
-          try {
-            const res = await fetch(`${API_BASE}/students`);
-            const data = await res.json();
-            setStudents(data);
-          } catch (err) {
-            console.error('Error fetching students:', err);
-          }
-          setLoading(false);
-        };
-
-        const viewStudentParents = async (studentId) => {
-          try {
-            const res = await fetch(`${API_BASE}/student/${studentId}/parents`);
-            const data = await res.json();
-            setParents(data);
-            setSelectedStudent(studentId);
-          } catch (err) {
-            console.error('Error fetching parents:', err);
-          }
-        };
-
-        if (loading) {
-          return <div className="text-center py-12">Loading students...</div>;
-        }
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Users className="text-blue-600" />
-                Students ({students.length})
-              </h2>
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {students.map(student => (
-                  <div
-                    key={student[0]}
-                    onClick={() => viewStudentParents(student[0])}
-                    className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 cursor-pointer transition-colors border border-blue-200"
-                  >
-                    <div className="font-semibold text-gray-800">{student[1]} {student[2]}</div>
-                    <div className="text-sm text-gray-600">{student[3]}</div>
-                    <div className="text-sm text-gray-500">{student[4]}</div>
-                    {student[5] && <div className="text-xs text-gray-500">Birthday: {new Date(student[5]).toLocaleDateString()}</div>}
-                  </div>
-                ))}
               </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Parents/Guardians</h2>
-              {selectedStudent ? (
-                <div className="space-y-2">
-                  {parents.length > 0 ? (
-                    parents.map(parent => (
-                      <div key={parent[0]} className="p-4 bg-cyan-50 rounded-lg border border-cyan-200">
-                        <div className="font-semibold text-gray-800">{parent[1]} {parent[2]}</div>
-                        <div className="text-sm text-gray-600">{parent[3]}</div>
-                        <div className="text-sm text-gray-500">{parent[4]}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-center py-8">No parents/guardians on record</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-8">Select a student to view their parents/guardians</p>
-              )}
-            </div>
-          </div>
-        );
-      };
-
-      // Parents View (Unchanged)
-      const ParentsView = () => {
-        const [parents, setParents] = useState([]);
-        const [selectedParent, setSelectedParent] = useState(null);
-        const [children, setChildren] = useState([]);
-        const [loading, setLoading] = useState(true);
-
-        useEffect(() => {
-          fetchParents();
-        }, []);
-
-        const fetchParents = async () => {
-          setLoading(true);
-          try {
-            const res = await fetch(`${API_BASE}/parents`);
-            const data = await res.json();
-            setParents(data);
-          } catch (err) {
-            console.error('Error fetching parents:', err);
-          }
-          setLoading(false);
-        };
-
-        const viewParentChildren = async (parentId) => {
-          try {
-            const res = await fetch(`${API_BASE}/parent/${parentId}/children`);
-            const data = await res.json();
-            setChildren(data);
-            setSelectedParent(parentId);
-          } catch (err) {
-            console.error('Error fetching children:', err);
-          }
-        };
-
-        if (loading) {
-          return <div className="text-center py-12">Loading parents...</div>;
-        }
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <UserPlus className="text-blue-600" />
-                Parents/Guardians ({parents.length})
-              </h2>
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {parents.map(parent => (
-                  <div
-                    key={parent[0]}
-                    onClick={() => viewParentChildren(parent[0])}
-                    className="p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 cursor-pointer transition-colors border border-cyan-200"
-                  >
-                    <div className="font-semibold text-gray-800">{parent[1]} {parent[2]}</div>
-                    <div className="text-sm text-gray-600">{parent[3]}</div>
-                    <div className="text-sm text-gray-500">{parent[4]}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Children</h2>
-              {selectedParent ? (
-                <div className="space-y-2">
-                  {children.length > 0 ? (
-                    children.map(child => (
-                      <div key={child[0]} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="font-semibold text-gray-800">{child[1]} {child[2]}</div>
-                        <div className="text-sm text-gray-600">{child[4]}</div>
-                        {child[3] && <div className="text-xs text-gray-500">Birthday: {new Date(child[3]).toLocaleDateString()}</div>}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-center py-8">No children on record</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-8">Select a parent to view their children</p>
-              )}
-            </div>
-          </div>
-        );
-      };
-
-      // Events View (Unchanged)
-      const EventsView = ({ onRefresh }) => {
-        const [events, setEvents] = useState([]);
-        const [selectedEvent, setSelectedEvent] = useState(null);
-        const [registrations, setRegistrations] = useState([]);
-        const [loading, setLoading] = useState(true);
-
-        useEffect(() => {
-          fetchEvents();
-        }, []);
-
-        const fetchEvents = async () => {
-          setLoading(true);
-          try {
-            const res = await fetch(`${API_BASE}/upcoming-events`);
-            const data = await res.json();
-            setEvents(data);
-          } catch (err) {
-            console.error('Error fetching events:', err);
-          }
-          setLoading(false);
-        };
-
-        const viewEventRegistrations = async (eventId) => {
-          try {
-            const res = await fetch(`${API_BASE}/event/${eventId}/registrations`);
-            const data = await res.json();
-            setRegistrations(data);
-            setSelectedEvent(eventId);
-          } catch (err) {
-            console.error('Error fetching registrations:', err);
-          }
-        };
-
-        if (loading) {
-          return <div className="text-center py-12">Loading events...</div>;
-        }
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Calendar className="text-blue-600" />
-                Upcoming Events ({events.length})
-              </h2>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {events.map(event => (
-                  <div
-                    key={event[0]}
-                    onClick={() => viewEventRegistrations(event[0])}
-                    className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg hover:from-blue-100 hover:to-cyan-100 cursor-pointer transition-all border border-blue-200 shadow-sm"
-                  >
-                    <div className="font-bold text-lg text-gray-800">{event[1]}</div>
-                    <div className="text-sm text-gray-600 mt-1">{new Date(event[2]).toLocaleString()}</div>
-                    <div className="text-sm text-gray-700 mt-1 flex items-center gap-1">
-                      <span className="text-blue-600">📍</span> {event[3]}
+              {/* Detail/Children Panel */}
+              <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
+                <h3 className="text-xl font-bold text-gray-800 mb-3">Parent Details</h3>
+                {selectedParent ? (
+                  <div className="space-y-3">
+                    <p className="font-semibold">{parents.find(p => p.id === selectedParent)?.firstName} {parents.find(p => p.id === selectedParent)?.lastName}</p>
+                    
+                    <h4 className="font-bold pt-3 border-t mt-3">Children ({children.length})</h4>
+                    <div className="space-y-2">
+                      {children.map(child => (
+                        <div key={child.personId} className="p-3 bg-white rounded-lg border border-gray-200">
+                          <p className="font-semibold text-sm">{child.firstName} {child.lastName}</p>
+                          <p className="text-xs text-gray-600">{child.email}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <p className="text-gray-500 text-center py-8">Select a parent to view details.</p>
+                )}
               </div>
             </div>
+          )}
+        </div>
+      );
+    };
 
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Registrations</h2>
-              {selectedEvent ? (
-                <div className="space-y-2">
-                  <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-semibold mb-3">
-                    Total Registered: {registrations.length}
-                  </div>
-                  {registrations.length > 0 ? (
-                    registrations.map(reg => (
-                      <div key={reg[0]} className="p-3 bg-cyan-50 rounded-lg border border-cyan-200">
-                        <div className="font-semibold text-gray-800">{reg[1]} {reg[2]}</div>
-                        <div className="text-sm text-gray-600">{reg[3]}</div>
-                        <div className="text-xs text-gray-500 mt-1">Registered: {new Date(reg[5]).toLocaleString()}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-center py-8">No registrations yet</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-8">Select an event to view registrations</p>
-              )}
-            </div>
-          </div>
-        );
+    // ************************************************************
+    // Events View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const EventsView = () => {
+      const [events, setEvents] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [registrations, setRegistrations] = useState([]);
+      const [selectedEvent, setSelectedEvent] = useState(null);
+
+      useEffect(() => {
+        fetchEvents();
+      }, []);
+
+      const fetchEvents = async () => {
+        setLoading(true);
+        const query = `
+          query AllEvents {
+            events {
+              eventId
+              eventName
+              startDateTime
+              location
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          // Rename/reformat fields to match what the component expects
+          const formattedEvents = (data.events || []).map(e => ({
+            id: e.eventId,
+            name: e.eventName,
+            dateTime: e.startDateTime,
+            location: e.location,
+          }));
+          setEvents(formattedEvents);
+        } catch (err) {
+          console.error('Error fetching events:', err);
+        }
+        setLoading(false);
       };
 
-      // Check-In View (Unchanged)
-      const CheckInView = ({ onRefresh }) => {
-        const [events, setEvents] = useState([]);
-        const [students, setStudents] = useState([]);
-        const [selectedEvent, setSelectedEvent] = useState(null);
-        const [checkinStatus, setCheckinStatus] = useState(null);
-        const [message, setMessage] = useState('');
-
-        useEffect(() => {
-          fetchUpcomingEvents();
-          fetchStudents();
-        }, []);
-
-        const fetchUpcomingEvents = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/upcoming-events`);
-            const data = await res.json();
-            setEvents(data);
-          } catch (err) {
-            console.error('Error fetching events:', err);
+      const viewEventRegistrations = async (eventId) => {
+        setRegistrations([]);
+        const query = `
+          query EventRegistrations($id: Int!) {
+            eventRegistrations(eventId: $id) { # FIX: Function name and argument
+              personId
+              firstName
+              lastName
+              email
+            }
           }
-        };
-
-        const fetchStudents = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/students`);
-            const data = await res.json();
-            setStudents(data);
-          } catch (err) {
-            console.error('Error fetching students:', err);
-          }
-        };
-
-        const fetchCheckinStatus = async (eventId) => {
-          try {
-            const res = await fetch(`${API_BASE}/event/${eventId}/checkin/status`);
-            const data = await res.json();
-            setCheckinStatus(data);
-          } catch (err) {
-            console.error('Error fetching check-in status:', err);
-          }
-        };
-
-        const handleEventSelect = (eventId) => {
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: eventId });
+          // CRITICAL: Update mapping to use camelCase from the server response
+          const registrationsData = (data.eventRegistrations || []).map(p => ({
+              id: p.personId,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              email: p.email,
+              registrationDate: new Date().toISOString(),
+          }));
+          
+          setRegistrations(registrationsData);
           setSelectedEvent(eventId);
-          fetchCheckinStatus(eventId);
-        };
-
-        const checkinStudent = async (studentId) => {
-          if (!selectedEvent) {
-            setMessage('Please select an event first');
-            return;
-          }
-
-          try {
-            const res = await fetch(`${API_BASE}/event/${selectedEvent}/checkin/${studentId}`, {
-              method: 'POST'
-            });
-            const data = await res.json();
-            
-            if (data.success) {
-              setMessage(`✓ Checked in successfully!`);
-              fetchCheckinStatus(selectedEvent);
-              onRefresh();
-              setTimeout(() => setMessage(''), 3000);
-            }
-          } catch (err) {
-            setMessage('Error checking in student');
-            console.error('Error:', err);
-          }
-        };
-
-        const checkoutStudent = async (studentId) => {
-          if (!selectedEvent) return;
-
-          try {
-            const res = await fetch(`${API_BASE}/event/${selectedEvent}/checkout/${studentId}`, {
-              method: 'POST'
-            });
-            const data = await res.json();
-            
-            if (data.success) {
-              setMessage(`✓ Checked out successfully!`);
-              fetchCheckinStatus(selectedEvent);
-              onRefresh();
-              setTimeout(() => setMessage(''), 3000);
-            }
-          } catch (err) {
-            setMessage('Error checking out student');
-            console.error('Error:', err);
-          }
-        };
-
-        const finalizeEvent = async () => {
-          if (!selectedEvent) return;
-
-          if (!confirm('Finalize this event? This will save all check-ins to the database and clear live tracking.')) {
-            return;
-          }
-
-          try {
-            const res = await fetch(`${API_BASE}/event/${selectedEvent}/finalize`, {
-              method: 'POST'
-            });
-            const data = await res.json();
-            
-            if (data.success) {
-              setMessage(`✓ Event finalized! ${data.records_saved} records saved.`);
-              setCheckinStatus(null);
-              setSelectedEvent(null);
-              onRefresh();
-              setTimeout(() => setMessage(''), 5000);
-            }
-          } catch (err) {
-            setMessage('Error finalizing event');
-            console.error('Error:', err);
-          }
-        };
-
-        return (
-          <div className="space-y-6">
-            {message && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
-                {message}
+        } catch (err) {
+          console.error('Error fetching registrations:', err);
+        }
+      };
+      
+      // ... (rest of EventsView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Calendar className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Events ({events.length})</h2>
+          </div>
+          
+          {loading ? (
+            <p className="text-center py-8 text-gray-500">Loading...</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Event List */}
+              <div className="lg:col-span-2">
+                <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-4">
+                  {events.map(event => (
+                    <div key={event.id} 
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        event.id === selectedEvent ? 'bg-blue-100 border-blue-400 shadow-md' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      onClick={() => viewEventRegistrations(event.id)}
+                    >
+                      <div className="font-semibold text-gray-800">{event.name}</div>
+                      <div className="text-sm text-gray-500">{event.location} &bull; {new Date(event.dateTime).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
 
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <CheckCircle className="text-blue-600" />
-                Event Check-In System
-              </h2>
-              
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Event</label>
+              {/* Registrations Panel */}
+              <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
+                <h3 className="text-xl font-bold text-gray-800 mb-3">Registrations ({registrations.length})</h3>
+                {selectedEvent ? (
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                    {registrations.map(reg => (
+                      <div key={reg.id} className="p-3 bg-white rounded-lg border border-gray-200">
+                        <p className="font-semibold text-sm">{reg.firstName} {reg.lastName}</p>
+                        <p className="text-xs text-gray-600">{reg.email}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">Select an event to view registrations</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ************************************************************
+    // Check-In View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const CheckInView = ({ onRefresh }) => {
+      const [events, setEvents] = useState([]);
+      const [students, setStudents] = useState([]);
+      const [selectedEvent, setSelectedEvent] = useState(null);
+      const [checkinStatus, setCheckinStatus] = useState(null);
+      const [message, setMessage] = useState('');
+      const [searchTerm, setSearchTerm] = useState('');
+
+      useEffect(() => {
+        fetchEvents();
+        fetchAllStudents();
+      }, []);
+
+      useEffect(() => {
+        if (selectedEvent) {
+          fetchCheckinStatus(selectedEvent);
+          const interval = setInterval(() => fetchCheckinStatus(selectedEvent), 3000);
+          return () => clearInterval(interval);
+        }
+      }, [selectedEvent]);
+
+      const fetchEvents = async () => {
+        const query = `
+          query AllEvents {
+            events {
+              eventId 
+              eventName 
+              startDateTime
+              location
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          const formattedEvents = (data.events || []).map(e => ({
+            id: e.eventId, 
+            name: e.eventName, 
+            dateTime: e.startDateTime, 
+            location: e.location,
+          }));
+          setEvents(formattedEvents);
+          if (formattedEvents.length > 0) {
+            setSelectedEvent(formattedEvents[0].id);
+          }
+        } catch (err) {
+          console.error('Error fetching events:', err);
+        }
+      };
+
+      const fetchAllStudents = async () => {
+        const query = `
+          query AllStudents {
+            students {
+              personId
+              firstName
+              lastName
+              email
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          setStudents(data.students || []); 
+        } catch (err) {
+          console.error('Error fetching students:', err);
+        }
+      };
+
+      const fetchCheckinStatus = async (eventId) => {
+        const query = `
+          query LiveStatus($id: Int!) {
+            liveEventStatus(eventId: $id) {
+              totalCheckedIn
+              checkedInStudents {
+                personId
+                firstName
+                lastName
+              }
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: eventId });
+          setCheckinStatus(data.liveEventStatus);
+        } catch (err) {
+          console.error('Error fetching check-in status:', err);
+        }
+      };
+
+      const checkinStudent = async (studentId) => {
+        if (!selectedEvent) return;
+        
+        const mutation = `
+          mutation CheckInStudent($eventId: Int!, $studentId: Int!) {
+            checkInStudent(eventId: $eventId, studentId: $studentId) { # FIX: Function name and arguments
+              totalCheckedIn
+            }
+          }
+        `;
+        try {
+          await graphqlFetch(mutation, { eventId: selectedEvent, studentId });
+          setMessage(`✓ Checked in successfully!`);
+          fetchCheckinStatus(selectedEvent);
+          onRefresh();
+          setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+          setMessage(`Error checking in student: ${err.message}`);
+          setTimeout(() => setMessage(''), 5000);
+        }
+      };
+
+      const checkoutStudent = async (studentId) => {
+        if (!selectedEvent) return;
+
+        const mutation = `
+          mutation CheckOutStudent($eventId: Int!, $studentId: Int!) {
+            checkOutStudent(eventId: $eventId, studentId: $studentId) { # FIX: Function name and arguments
+              totalCheckedIn
+            }
+          }
+        `;
+        try {
+          await graphqlFetch(mutation, { eventId: selectedEvent, studentId });
+          setMessage(`✓ Checked out successfully!`);
+          fetchCheckinStatus(selectedEvent);
+          onRefresh();
+          setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+          setMessage(`Error checking out student: ${err.message}`);
+          setTimeout(() => setMessage(''), 5000);
+        }
+      };
+
+      const checkedInIds = new Set((checkinStatus?.checkedInStudents || []).map(s => s.personId.toString()));
+
+      const filteredStudents = students.filter(student => {
+        const name = `${student.firstName} ${student.lastName}`.toLowerCase();
+        const email = student.email ? student.email.toLowerCase() : '';
+        const term = searchTerm.toLowerCase();
+        return name.includes(term) || email.includes(term);
+      });
+
+      const studentList = filteredStudents.sort((a, b) => {
+        const aCheckedIn = checkedInIds.has(a.personId.toString());
+        const bCheckedIn = checkedInIds.has(b.personId.toString());
+        if (aCheckedIn !== bCheckedIn) {
+          return aCheckedIn ? -1 : 1; // Checked-in students first
+        }
+        return a.lastName.localeCompare(b.lastName); // Then sort by last name
+      });
+      
+      // ... (rest of CheckInView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <CheckCircle className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Student Check-In</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Controls and Stats */}
+            <div className="lg:col-span-1 space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Event</label>
                 <select
                   value={selectedEvent || ''}
-                  onChange={(e) => handleEventSelect(Number(e.target.value))}
-                  className="w-full p-3 border-2 border-blue-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => setSelectedEvent(Number(e.target.value))}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">Choose an event...</option>
                   {events.map(event => (
-                    <option key={event[0]} value={event[0]}>
-                      {event[1]} - {new Date(event[2]).toLocaleDateString()}
+                    <option key={event.id} value={event.id}>
+                      {event.name} ({new Date(event.dateTime).toLocaleDateString()})
                     </option>
                   ))}
                 </select>
               </div>
 
               {selectedEvent && checkinStatus && (
-                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-2xl text-blue-700">{checkinStatus.total_checked_in}</div>
-                      <div className="text-sm text-gray-600">Currently Checked In</div>
-                    </div>
-                    <button
-                      onClick={finalizeEvent}
-                      className="bg-gradient-to-r from-teal-500 to-teal-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-teal-600 hover:to-teal-700 transition-all shadow-lg"
-                    >
-                      Finalize Event
-                    </button>
-                  </div>
+                <div className="p-4 bg-cyan-50 rounded-lg border border-cyan-200">
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">
+                    Live Status
+                  </h3>
+                  <p className="text-2xl font-extrabold text-blue-600">
+                    {checkinStatus.totalCheckedIn} Checked In
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    <span className="font-semibold">Event ID:</span> {selectedEvent}
+                  </p>
+                </div>
+              )}
+              
+              {message && (
+                <div className={`p-3 rounded-lg font-semibold ${message.startsWith('✓') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {message}
                 </div>
               )}
             </div>
 
-            {selectedEvent && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Check In Students</h3>
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                    {students.map(student => {
-                      const isCheckedIn = checkinStatus?.student_Ids?.includes(String(student[0]));
-                      return (
-                        <div
-                          key={student[0]}
-                          className={`p-3 rounded-lg border-2 flex justify-between items-center ${
-                            isCheckedIn
-                              ? 'bg-green-50 border-green-300'
-                              : 'bg-gray-50 border-gray-200'
-                          }`}
+            {/* Student List for Check-in */}
+            <div className="lg:col-span-2">
+              <input
+                type="text"
+                placeholder="Search student by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-3 border-2 border-gray-300 rounded-lg mb-4 focus:border-blue-500 focus:outline-none"
+              />
+              
+              <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-4">
+                {studentList.map(student => {
+                  const isCheckedIn = checkedInIds.has(student.personId.toString());
+                  return (
+                    <div key={student.personId} 
+                      className={`p-4 rounded-lg border-2 flex justify-between items-center ${
+                        isCheckedIn ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div>
+                        {/* FIX: Use camelCase properties */}
+                        <div className="font-semibold text-gray-800">{student.firstName} {student.lastName}</div>
+                        <div className="text-xs text-gray-500">{student.email}</div>
+                      </div>
+                      {isCheckedIn ? (
+                        <button onClick={() => checkoutStudent(student.personId)}
+                          className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors"
                         >
-                          <div>
-                            <div className="font-semibold text-gray-800">{student[1]} {student[2]}</div>
-                            <div className="text-xs text-gray-500">{student[3]}</div>
-                          </div>
-                          {isCheckedIn ? (
-                            <button
-                              onClick={() => checkoutStudent(student[0])}
-                              className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors"
-                            >
-                              Check Out
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => checkinStudent(student[0])}
-                              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-                            >
-                              Check In
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Checked In Now</h3>
-                  {checkinStatus && checkinStatus.student_Ids && checkinStatus.student_Ids.length > 0 ? (
-                    <div className="space-y-2">
-                      {checkinStatus.student_Ids.map(studentId => {
-                        const student = students.find(s => s[0] === Number(studentId));
-                        const checkInTime = checkinStatus.check_in_times?.[studentId];
-                        return student ? (
-                          <div key={studentId} className="p-3 bg-green-50 rounded-lg border border-green-200">
-                            <div className="font-semibold text-gray-800">{student[1]} {student[2]}</div>
-                            {checkInTime && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                Checked in at: {new Date(checkInTime).toLocaleTimeString()}
-                              </div>
-                            )}
-                          </div>
-                        ) : null;
-                      })}
+                          Check Out
+                        </button>
+                      ) : (
+                        <button onClick={() => checkinStudent(student.personId)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                          disabled={!selectedEvent}
+                        >
+                          Check In
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-gray-500 text-center py-8">No one checked in yet</p>
-                  )}
-                </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </div>
-        );
+        </div>
+      );
+    };
+    
+    // ************************************************************
+    // Small Groups View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const SmallGroupsView = () => {
+      const [groups, setGroups] = useState([]);
+      const [students, setStudents] = useState([]); // All students for adding
+      const [loading, setLoading] = useState(false);
+      const [members, setMembers] = useState([]);
+      const [selectedGroup, setSelectedGroup] = useState(null);
+      const [message, setMessage] = useState('');
+
+      useEffect(() => {
+        fetchGroups();
+        fetchStudents(); // Fetch all students once
+      }, []);
+
+      const fetchGroups = async () => {
+        setLoading(true);
+        const query = `
+          query AllGroups {
+            smallGroups {
+              smallGroupId
+              name
+              description
+              leader {
+                personId
+                firstName
+                lastName
+              }
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          setGroups(data.smallGroups || []);
+        } catch (err) {
+          console.error('Error fetching groups:', err);
+        }
+        setLoading(false);
+      };
+      
+      // Re-using CheckInView's student fetch, ensuring correct property access
+      const fetchStudents = async () => {
+        const query = `
+          query AllStudents {
+            students {
+              personId
+              firstName
+              lastName
+              email
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          // Map data to client-side friendly format (using 'id')
+          const formattedStudents = (data.students || []).map(s => ({
+              id: s.personId, 
+              firstName: s.firstName,
+              lastName: s.lastName,
+              email: s.email,
+          }));
+          setStudents(formattedStudents);
+        } catch (err) {
+          console.error('Error fetching students:', err);
+        }
       };
 
-      // **FIXED** Small Groups View
-      const SmallGroupsView = () => {
-        const [groups, setGroups] = useState([]);
-        const [students, setStudents] = useState([]); // All students
-        const [selectedGroup, setSelectedGroup] = useState(null);
-        const [members, setMembers] = useState([]);
-        const [loading, setLoading] = useState(true);
-        const [message, setMessage] = useState('');
-
-        useEffect(() => {
-          fetchGroups();
-          fetchStudents();
-        }, []);
-
-        const fetchStudents = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/students`);
-            const data = await res.json(); 
-            setStudents(data);
-          } catch (err) {
-            console.error('Error fetching students:', err);
-          }
-        };
-
-        const fetchGroups = async () => {
-          setLoading(true);
-          try {
-            const res = await fetch(`${API_BASE}/smallgroups`);
-            const data = await res.json();
-            setGroups(data);
-          } catch (err) {
-            console.error('Error fetching groups:', err);
-          }
-          setLoading(false);
-        };
-
-        const viewGroupMembers = async (groupId) => {
-          setMembers([]);
-          try {
-            const res = await fetch(`${API_BASE}/smallgroup/${groupId}/members`);
-            const data = await res.json();
-            setMembers(data);
-            setSelectedGroup(groupId);
-          } catch (err) {
-            console.error('Error fetching members:', err);
-          }
-        };
-        
-        const updateGroupMembership = async (studentId, action) => {
-          if (!selectedGroup) return;
-
-          const endpoint = action === 'add' ? 'add-student' : 'remove-student';
-          // THE FIX: Use POST for adding, DELETE for removing
-          const httpMethod = action === 'add' ? 'POST' : 'DELETE'; 
-          
-          try {
-            const res = await fetch(`${API_BASE}/smallgroup/${selectedGroup}/${endpoint}/${studentId}`, {
-                method: httpMethod // Use the determined HTTP method
-            });
-
-            if (!res.ok) {
-                let errorText = `Failed to ${action} student. Status: ${res.status}`;
-                try {
-                    const errorData = await res.json();
-                    errorText = errorData.error || errorText;
-                } catch (e) {
-                    // This will catch the 405 error if Flask doesn't return JSON
-                    errorText = `Server responded with non-JSON content. Status: ${res.status}. Check Flask endpoints.`;
-                }
-                setMessage(`Error: ${errorText}`);
-                setTimeout(() => setMessage(''), 5000);
-                return;
+      const viewGroupMembers = async (groupId) => {
+        setMembers([]);
+        const query = `
+          query GroupMembers($id: Int!) {
+            smallGroupMembers(groupId: $id) { # FIX: Function name and argument
+              personId
+              firstName
+              lastName
+              email
             }
-
-            const data = await res.json();
-            
-            if (data.success) {
-                setMessage(`✓ Student ${action === 'add' ? 'added to' : 'removed from'} group ${selectedGroup}.`);
-                viewGroupMembers(selectedGroup); // Refresh members list
-                setTimeout(() => setMessage(''), 3000);
-            } else {
-                 setMessage(`Operation Failed: ${data.message || 'Unknown issue.'}`);
-                 setTimeout(() => setMessage(''), 5000);
-            }
-
-          } catch (err) {
-            setMessage('Network or parsing error occurred.');
-            console.error('Error:', err);
-            setTimeout(() => setMessage(''), 5000);
           }
-        };
-
-        if (loading) {
-          return <div className="text-center py-12">Loading small groups...</div>;
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: groupId });
+          // FIX: Access result array name using camelCase
+          const formattedMembers = (data.smallGroupMembers || []).map(p => ({
+              id: p.personId,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              email: p.email,
+          }));
+          setMembers(formattedMembers);
+          setSelectedGroup(groupId);
+        } catch (err) {
+          console.error('Error fetching members:', err);
         }
-        
-        const currentMemberIds = new Set(members.map(member => String(member[0])));
+      };
 
-        return (
-          <div className="space-y-6">
-            {message && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
-                {message}
-              </div>
-            )}
-            
+      const addStudentToGroup = async (studentId, groupId) => {
+        const mutation = `
+          mutation AddMember($groupId: Int!, $studentId: Int!) {
+            addStudentToGroup(groupId: $groupId, studentId: $studentId) { # FIX: Function name and arguments
+              smallGroupId
+            }
+          }
+        `;
+        try {
+          await graphqlFetch(mutation, { groupId, studentId });
+          setMessage(`✓ Student added successfully!`);
+          viewGroupMembers(groupId); // Refresh member list
+          setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+          setMessage(`Error adding student: ${err.message}`);
+          setTimeout(() => setMessage(''), 5000);
+        }
+      };
+
+      const currentMemberIds = new Set(members.map(m => String(m.id)));
+
+      // ... (rest of SmallGroupsView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <ClipboardList className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Small Groups ({groups.length})</h2>
+          </div>
+
+          {loading ? (
+            <p className="text-center py-8 text-gray-500">Loading...</p>
+          ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Group Selection */}
-              <div className="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <ClipboardList className="text-blue-600" />
-                  Small Groups
-                </h2>
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {groups.map((group, idx) => (
-                    // The smallgroup endpoint uses the index+1 as the ID
-                    <div
-                      key={idx}
-                      onClick={() => viewGroupMembers(idx + 1)}
-                      className={`p-4 rounded-lg cursor-pointer transition-all border shadow-sm 
-                        ${selectedGroup === idx + 1 ? 'bg-blue-100 border-blue-400' : 'bg-gradient-to-r from-teal-50 to-cyan-50 hover:from-teal-100 hover:to-cyan-100 border-teal-200'}`}
+              {/* Group List */}
+              <div className="lg:col-span-1">
+                <div className="max-h-[75vh] overflow-y-auto space-y-3 pr-4">
+                  {groups.map(group => (
+                    <div key={group.smallGroupId} 
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        group.smallGroupId === selectedGroup ? 'bg-blue-100 border-blue-400 shadow-md' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      onClick={() => viewGroupMembers(group.smallGroupId)}
                     >
-                      <div className="font-bold text-lg text-gray-800">{group[0]}</div>
-                      <div className="text-sm text-gray-600 mt-1">{group[1]}</div>
+                      <div className="font-semibold text-gray-800">{group.name}</div>
+                      <div className="text-sm text-gray-500">{group.description}</div>
+                      {group.leader && (
+                        <div className="text-xs text-blue-500 mt-1">
+                          Leader: {group.leader.firstName} {group.leader.lastName}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-              
-              {/* Group Members List */}
-              <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">Group Members</h2>
+
+              {/* Members and Add Student Panel */}
+              <div className="lg:col-span-2 bg-gray-100 p-4 rounded-lg shadow-inner">
+                <h3 className="text-xl font-bold text-gray-800 mb-3">Group Members ({members.length})</h3>
                 {selectedGroup ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* List of current members */}
+                    {/* Current Members */}
                     <div>
-                      <h3 className="text-xl font-semibold text-gray-700 mb-3">Current Members ({members.length})</h3>
+                      <h4 className="font-bold text-gray-700 mb-3">Current Members</h4>
                       <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                        {members.length > 0 ? (
-                          members.map(member => (
-                            <div key={member[0]} className="p-3 bg-cyan-50 rounded-lg border border-cyan-200 flex justify-between items-center">
-                              <div>
-                                <div className="font-semibold text-gray-800">{member[1]} {member[2]}</div>
-                                <div className="text-sm text-gray-600">{member[3]}</div>
-                              </div>
-                              <button 
-                                onClick={() => updateGroupMembership(member[0], 'remove')}
-                                className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-red-600 transition-colors"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-gray-500 text-center py-8">No members in this group</p>
-                        )}
+                        {members.map(member => (
+                          <div key={member.id} className="p-3 bg-white rounded-lg border border-gray-200">
+                            {/* FIX: Use camelCase properties */}
+                            <p className="font-semibold text-sm">{member.firstName} {member.lastName}</p>
+                            <p className="text-xs text-gray-600">{member.email}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    
-                    {/* List of non-members for adding */}
+
+                    {/* Available Students to Add */}
                     <div>
-                      <h3 className="text-xl font-semibold text-gray-700 mb-3">Available Students ({students.length - members.length})</h3>
+                      <h4 className="font-bold text-gray-700 mb-3">Available Students ({students.length - members.length})</h4>
                       <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                        {students.filter(s => !currentMemberIds.has(String(s[0]))).map(student => (
-                          <div key={student[0]} className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex justify-between items-center">
+                        {students.filter(s => !currentMemberIds.has(String(s.id))).map(student => (
+                          <div key={student.id} className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex justify-between items-center">
                             <div>
-                              <div className="font-semibold text-gray-800">{student[1]} {student[2]}</div>
-                              <div className="text-sm text-gray-600">{student[3]}</div>
+                              {/* FIX: Use camelCase properties */}
+                              <div className="font-semibold text-gray-800">{student.firstName} {student.lastName}</div>
+                              <div className="text-xs text-gray-500">{student.email}</div>
                             </div>
-                            <button 
-                              onClick={() => updateGroupMembership(student[0], 'add')}
-                              className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                            <button
+                              onClick={() => addStudentToGroup(student.id, selectedGroup)}
+                              className="bg-blue-600 text-white px-3 py-1 text-sm rounded-lg hover:bg-blue-700 transition-colors"
                             >
                               Add
                             </button>
@@ -851,134 +1057,165 @@
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-8">Select a group to manage members</p>
+                  <p className="text-gray-500 text-center py-8">Select a group to manage members.</p>
+                )}
+                {message && (
+                  <div className={`mt-4 p-3 rounded-lg font-semibold ${message.startsWith('✓') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {message}
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-        );
+          )}
+        </div>
+      );
+    };
+    
+    // ************************************************************
+    // Event Notes View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const EventNotesView = () => {
+      const [events, setEvents] = useState([]);
+      const [selectedEvent, setSelectedEvent] = useState(null);
+      const [notes, setNotes] = useState([]);
+      const [content, setContent] = useState('');
+      const [author, setAuthor] = useState('');
+      const [message, setMessage] = useState('');
+
+      useEffect(() => {
+        fetchEvents();
+      }, []);
+
+      useEffect(() => {
+        if (selectedEvent) {
+          fetchEventNotes(selectedEvent);
+        } else {
+          setNotes([]);
+        }
+      }, [selectedEvent]);
+
+      const fetchEvents = async () => {
+        // Re-use event fetching logic
+        const query = `
+          query AllEvents {
+            events {
+              eventId 
+              eventName 
+              startDateTime
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          const formattedEvents = (data.events || []).map(e => ({
+            id: e.eventId, 
+            name: e.eventName, 
+            dateTime: e.startDateTime, 
+          }));
+          setEvents(formattedEvents);
+          if (formattedEvents.length > 0) {
+            setSelectedEvent(formattedEvents[0].id);
+          }
+        } catch (err) {
+          console.error('Error fetching events:', err);
+        }
       };
 
-      // Event Notes View (Unchanged)
-      const EventNotesView = () => {
-        const [events, setEvents] = useState([]);
-        const [selectedEvent, setSelectedEvent] = useState(null);
-        const [notes, setNotes] = useState([]);
-        const [newNote, setNewNote] = useState('');
-        const [author, setAuthor] = useState('');
-        const [message, setMessage] = useState('');
-
-        useEffect(() => {
-          fetchEvents();
-        }, []);
-
-        const fetchEvents = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/events`);
-            const data = await res.json();
-            setEvents(data);
-          } catch (err) {
-            console.error('Error fetching events:', err);
-          }
-        };
-
-        const fetchNotes = async (eventId) => {
-          try {
-            const res = await fetch(`${API_BASE}/event/${eventId}/notes`);
-            const data = await res.json();
-            setNotes(data.event_notes[0]?.notes || []);
-          } catch (err) {
-            console.error('Error fetching notes:', err);
-            setNotes([]);
-          }
-        };
-
-        const handleEventSelect = (eventId) => {
-          setSelectedEvent(eventId);
-          fetchNotes(eventId);
-        };
-
-        const addNote = async () => {
-          if (!selectedEvent || !newNote.trim()) {
-            setMessage('Please select an event and enter a note');
-            return;
-          }
-
-          try {
-            const res = await fetch(`${API_BASE}/event/${selectedEvent}/notes`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                content: newNote,
-                author: author || 'Anonymous',
-                tags: []
-              })
-            });
-
-            const data = await res.json();
-            
-            if (data.message) {
-              setMessage('✓ Note added successfully!');
-              setNewNote('');
-              fetchNotes(selectedEvent);
-              setTimeout(() => setMessage(''), 3000);
+      const fetchEventNotes = async (eventId) => {
+        const query = `
+          query EventNotesQuery($id: Int!) {
+            eventNotes(eventId: $id) {
+              notes {
+                noteId
+                author
+                content
+                timestamp
+                tags
+              }
             }
-          } catch (err) {
-            setMessage('Error adding note');
-            console.error('Error:', err);
           }
-        };
+        `;
+        try {
+          const data = await graphqlFetch(query, { id: eventId });
+          setNotes(data.eventNotes?.notes || []);
+        } catch (err) {
+          console.error('Error fetching event notes:', err);
+          setNotes([]);
+        }
+      };
 
-        return (
-          <div className="space-y-6">
-            {message && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
-                {message}
-              </div>
-            )}
+      const addNote = async () => {
+        if (!selectedEvent || !content.trim()) {
+          setMessage('Note content cannot be empty.');
+          setTimeout(() => setMessage(''), 3000);
+          return;
+        }
+        
+        // Use the Mutation for adding/updating notes
+        const mutation = `
+          mutation AddNote($eventId: Int!, $content: String!, $author: String) {
+            addEventNote(eventId: $eventId, content: $content, author: $author) {
+              noteId
+            }
+          }
+        `;
 
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Bell className="text-blue-600" />
-                Event Notes
-              </h2>
-              
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Event</label>
+        try {
+          await graphqlFetch(mutation, { eventId: selectedEvent, content: content.trim(), author: author.trim() || 'Anonymous' });
+          setMessage('✓ Note added successfully!');
+          setContent('');
+          setAuthor('');
+          fetchEventNotes(selectedEvent);
+          setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+          setMessage(`Error adding note: ${err.message}`);
+          setTimeout(() => setMessage(''), 5000);
+        }
+      };
+      
+      // ... (rest of EventNotesView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Bell className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Event Notes</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Controls */}
+            <div className="md:col-span-1 space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Event</label>
                 <select
                   value={selectedEvent || ''}
-                  onChange={(e) => handleEventSelect(Number(e.target.value))}
-                  className="w-full p-3 border-2 border-blue-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => setSelectedEvent(Number(e.target.value))}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">Choose an event...</option>
                   {events.map(event => (
-                    <option key={event[0]} value={event[0]}>
-                      {event[1]} - {new Date(event[2]).toLocaleDateString()}
+                    <option key={event.id} value={event.id}>
+                      {event.name} ({new Date(event.dateTime).toLocaleDateString()})
                     </option>
                   ))}
                 </select>
               </div>
-
+              
               {selectedEvent && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Your Name (Optional)</label>
-                    <input
-                      type="text"
-                      value={author}
-                      onChange={(e) => setAuthor(e.target.value)}
-                      placeholder="Enter your name..."
-                      className="w-full p-2 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"
-                    />
+                <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
+                  <h3 className="text-xl font-bold text-gray-800 mb-3">Add New Note</h3>
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Your Name (Optional)</label>
+                      <input type="text" value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Enter your name..." className="w-full p-2 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"/>
+                    </div>
                     
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Note</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Note Content</label>
                     <textarea
-                      value={newNote}
-                      onChange={(e) => setNewNote(e.target.value)}
-                      placeholder="What happened during this event?"
-                      rows={4}
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Enter note details..."
+                      rows="4"
                       className="w-full p-3 border-2 border-blue-200 rounded-lg focus:border-blue-500 focus:outline-none"
-                    />
+                    ></textarea>
                     
                     <button
                       onClick={addNote}
@@ -987,219 +1224,218 @@
                       Add Note
                     </button>
                   </div>
-
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-3">Previous Notes</h3>
-                    {notes.length > 0 ? (
-                      <div className="space-y-3">
-                        {notes.map((note, idx) => (
-                          <div key={idx} className="p-4 bg-cyan-50 rounded-lg border border-cyan-200">
-                            <div className="flex justify-between items-start mb-2">
-                              <span className="font-semibold text-gray-800">{note.author}</span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(note.timestamp).toLocaleString()}
-                              </span>
-                            </div>
-                            <p className="text-gray-700">{note.content}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-gray-500 text-center py-8">No notes yet for this event</p>
-                    )}
-                  </div>
+                </div>
+              )}
+              
+              {message && (
+                <div className={`p-3 rounded-lg font-semibold ${message.startsWith('✓') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {message}
                 </div>
               )}
             </div>
-          </div>
-        );
-      };
-      
-      // Event Types and Custom Data View (Unchanged)
-      const EventTypesView = () => {
-        const [eventTypes, setEventTypes] = useState([]);
-        const [newTypeName, setNewTypeName] = useState('');
-        const [customFieldEventId, setCustomFieldEventId] = useState('');
-        const [customFieldKey, setCustomFieldKey] = useState('');
-        const [customFieldValue, setCustomFieldValue] = useState('');
-        const [message, setMessage] = useState('');
 
-        useEffect(() => {
-          fetchEventTypes();
-        }, []);
-
-        const fetchEventTypes = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/event/types`);
-            const data = await res.json();
-            setEventTypes(data);
-          } catch (err) {
-            console.error('Error fetching event types:', err);
-          }
-        };
-
-        const createEventType = async () => {
-          if (!newTypeName.trim()) {
-            setMessage('Event type name is required.');
-            return;
-          }
-
-          try {
-            const res = await fetch(`${API_BASE}/event/type`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ eventType: newTypeName.trim() })
-            });
-
-            const data = await res.json();
-            
-            if (data.message) {
-              setMessage(`✓ Event Type created: ${newTypeName}`);
-              setNewTypeName('');
-              fetchEventTypes(); // Refresh list
-              setTimeout(() => setMessage(''), 3000);
-            } else if (data.error) {
-              setMessage(`Error: ${data.error}`);
-              setTimeout(() => setMessage(''), 5000);
-            }
-          } catch (err) {
-            setMessage('Error creating event type.');
-            console.error('Error:', err);
-          }
-        };
-
-        const createEventCustomData = async () => {
-          if (!customFieldEventId || !customFieldKey.trim() || !customFieldValue.trim()) {
-            setMessage('All custom field inputs are required.');
-            return;
-          }
-
-          try {
-            const res = await fetch(`${API_BASE}/event/custom-data/${customFieldEventId}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                key: customFieldKey.trim(), 
-                value: customFieldValue.trim() 
-              })
-            });
-
-            const data = await res.json();
-            
-            if (data.message) {
-              setMessage(`✓ Custom field added to Event ${customFieldEventId}`);
-              setCustomFieldEventId('');
-              setCustomFieldKey('');
-              setCustomFieldValue('');
-              setTimeout(() => setMessage(''), 3000);
-            } else if (data.error) {
-              setMessage(`Error: ${data.error}`);
-              setTimeout(() => setMessage(''), 5000);
-            }
-          } catch (err) {
-            setMessage('Error adding custom data.');
-            console.error('Error:', err);
-          }
-        };
-
-
-        return (
-          <div className="space-y-6">
-            {message && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
-                {message}
-              </div>
-            )}
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Existing Event Types List */}
-              <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100 lg:col-span-1">
-                <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <Settings className="text-blue-600" />
-                  Existing Event Types
-                </h3>
-                <div className="space-y-2">
-                  {eventTypes.length > 0 ? (
-                    eventTypes.map(type => (
-                      // Assuming eventType is the field holding the type name
-                      <div key={type.eventType || type._id} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="font-semibold text-gray-800">{type.eventType}</div>
-                        <div className="text-xs text-gray-500">ID: {type._id}</div>
+            {/* Notes List */}
+            <div className="md:col-span-2">
+              <h3 className="text-xl font-bold text-gray-800 mb-3">Previous Notes ({notes.length})</h3>
+              {selectedEvent ? (
+                notes.length > 0 ? (
+                  <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-4">
+                    {notes.map((note) => (
+                      <div key={note.noteId} className="p-4 bg-cyan-50 rounded-lg border border-cyan-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold text-gray-800">{note.author}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(note.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-700">{note.content}</p>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500">No event types found.</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No notes yet for this event</p>
+                )
+              ) : (
+                <p className="text-gray-500 text-center py-8">Select an event to view notes.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
+    // ************************************************************
+    // Event Configuration View - REFACTORED TO USE GRAPHQL
+    // ************************************************************
+    const EventConfigView = () => {
+      const [events, setEvents] = useState([]);
+      const [selectedEventId, setSelectedEventId] = useState(null);
+      const [eventTypeId, setEventTypeId] = useState(null);
+      const [customFieldKey, setCustomFieldKey] = useState('');
+      const [customFieldValue, setCustomFieldValue] = useState('');
+      const [message, setMessage] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      useEffect(() => {
+        fetchEvents();
+      }, []);
+
+      const fetchEvents = async () => {
+        setLoading(true);
+        const query = `
+          query AllEvents {
+            events {
+              eventId
+              eventName
+              eventTypeId
+              startDateTime
+            }
+          }
+        `;
+        try {
+          const data = await graphqlFetch(query);
+          const formattedEvents = (data.events || []).map(e => ({
+            id: e.eventId, 
+            name: e.eventName, 
+            eventTypeId: e.eventTypeId,
+            dateTime: e.startDateTime, 
+          }));
+          setEvents(formattedEvents);
+          if (formattedEvents.length > 0) {
+            setSelectedEventId(formattedEvents[0].id);
+            setEventTypeId(formattedEvents[0].eventTypeId);
+          }
+        } catch (err) {
+          console.error('Error fetching events for config:', err);
+        }
+        setLoading(false);
+      };
+
+      const createEventCustomData = async () => {
+        if (!selectedEventId || !eventTypeId || !customFieldKey.trim() || !customFieldValue.trim()) {
+          setMessage('All fields must be filled out.');
+          setTimeout(() => setMessage(''), 3000);
+          return;
+        }
+        
+        const mutation = `
+          mutation AddCustomData($eventId: Int!, $data: EventCustomDataInput!) {
+            addEventCustomData(eventId: $eventId, data: $data) {
+              eventId
+              eventTypeId
+              customData
+            }
+          }
+        `;
+        
+        // Data structure for the mutation input
+        const inputData = {
+          eventTypeId: eventTypeId,
+          customData: {
+            [customFieldKey.trim()]: customFieldValue.trim()
+          },
+        };
+
+        try {
+          await graphqlFetch(mutation, { eventId: Number(selectedEventId), data: inputData });
+          setMessage('✓ Custom data added/updated successfully!');
+          setCustomFieldKey('');
+          setCustomFieldValue('');
+          setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+          setMessage(`Error adding custom data: ${err.message}`);
+          setTimeout(() => setMessage(''), 5000);
+        }
+      };
+
+      const handleEventChange = (e) => {
+        const id = Number(e.target.value);
+        setSelectedEventId(id);
+        const selectedEvent = events.find(event => event.id === id);
+        if (selectedEvent) {
+          setEventTypeId(selectedEvent.eventTypeId);
+        }
+      };
+
+      // ... (rest of EventConfigView rendering logic)
+      return (
+        <div className="bg-white shadow-xl rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Settings className="text-blue-600" size={32} />
+            <h2 className="text-2xl font-bold text-gray-800">Event Configuration</h2>
+          </div>
+          
+          {loading ? (
+            <p className="text-center py-8 text-gray-500">Loading...</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Event</label>
+                  <select
+                    value={selectedEventId || ''}
+                    onChange={handleEventChange}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {events.map(event => (
+                      <option key={event.id} value={event.id}>
+                        {event.name} ({new Date(event.dateTime).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedEventId && (
+                    <p className="text-xs text-gray-600 mt-2">Event Type ID: {eventTypeId}</p>
                   )}
                 </div>
               </div>
 
-              {/* Create New Event Type */}
-              <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-cyan-100 lg:col-span-1">
-                <h3 className="text-2xl font-bold text-gray-800 mb-4">Create New Event Type</h3>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Event Type Name</label>
-                <input
-                  type="text"
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  placeholder="e.g., Small Group, Summer Camp"
-                  className="w-full p-3 border-2 border-cyan-200 rounded-lg mb-4 focus:border-cyan-500 focus:outline-none"
-                />
-                <button
-                  onClick={createEventType}
-                  className="w-full bg-cyan-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-cyan-700 transition-colors"
-                >
-                  Create Type
-                </button>
-              </div>
-
-              {/* Create Event Custom Data */}
-              <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-teal-100 lg:col-span-1">
-                <h3 className="text-2xl font-bold text-gray-800 mb-4">Add Event Custom Data</h3>
+              <div className="space-y-4">
+                {message && (
+                  <div className={`p-3 rounded-lg font-semibold ${message.startsWith('✓') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {message}
+                  </div>
+                )}
                 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Event ID (MySQL ID)</label>
-                <input
-                  type="number"
-                  value={customFieldEventId}
-                  onChange={(e) => setCustomFieldEventId(e.target.value)}
-                  placeholder="e.g., 5"
-                  className="w-full p-3 border-2 border-teal-200 rounded-lg mb-3 focus:border-teal-500 focus:outline-none"
-                />
+                <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
+                  <h3 className="text-xl font-bold text-gray-800 mb-3">Add Event Custom Data (MongoDB)</h3>
+                  
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Custom Field Key</label>
+                  <input
+                    type="text"
+                    value={customFieldKey}
+                    onChange={(e) => setCustomFieldKey(e.target.value)}
+                    placeholder="e.g., BusRoute"
+                    className="w-full p-3 border-2 border-teal-200 rounded-lg mb-3 focus:border-teal-500 focus:outline-none"
+                  />
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Custom Field Key</label>
-                <input
-                  type="text"
-                  value={customFieldKey}
-                  onChange={(e) => setCustomFieldKey(e.target.value)}
-                  placeholder="e.g., BusRoute"
-                  className="w-full p-3 border-2 border-teal-200 rounded-lg mb-3 focus:border-teal-500 focus:outline-none"
-                />
-
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Custom Field Value</label>
-                <input
-                  type="text"
-                  value={customFieldValue}
-                  onChange={(e) => setCustomFieldValue(e.target.value)}
-                  placeholder="e.g., North Loop"
-                  className="w-full p-3 border-2 border-teal-200 rounded-lg mb-4 focus:border-teal-500 focus:outline-none"
-                />
-                
-                <button
-                  onClick={createEventCustomData}
-                  className="w-full bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors"
-                >
-                  Add Custom Data
-                </button>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Custom Field Value</label>
+                  <input
+                    type="text"
+                    value={customFieldValue}
+                    onChange={(e) => setCustomFieldValue(e.target.value)}
+                    placeholder="e.g., North Loop"
+                    className="w-full p-3 border-2 border-teal-200 rounded-lg mb-4 focus:border-teal-500 focus:outline-none"
+                  />
+                  
+                  <button
+                    onClick={createEventCustomData}
+                    className="w-full bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors"
+                  >
+                    Add Custom Data
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      };
+          )}
+        </div>
+      );
+    };
 
-      // Final rendering call
-      const rootElement = document.getElementById('root');
-      if (rootElement) {
-          ReactDOM.createRoot(rootElement).render(React.createElement(YouthGroupApp));
-      }
-    </script>
+    // Final rendering call
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+        ReactDOM.createRoot(rootElement).render(React.createElement(YouthGroupApp));
+    }
+  </script>
 </body>
 </html>

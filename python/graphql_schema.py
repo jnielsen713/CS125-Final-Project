@@ -142,6 +142,7 @@ class ActiveEvent:
     start_time: Optional[str] = None
     location: str
     current_attendance: int
+    students: List[Person]
 
 
 @strawberry.type
@@ -151,6 +152,14 @@ class Attendance:
     event: Event
     checked_in_at: str
     checked_out_at: Optional[str] = None
+
+
+@strawberry.type
+class LiveDashboardData:
+    """Aggregated data for the dashboard view"""
+    number_of_active_events: int
+    total_people_across_all_events: int
+    active_events: List[ActiveEvent]
 
 
 # ============================================================================
@@ -572,7 +581,8 @@ def get_active_events_resolver() -> List[ActiveEvent]:
                         event_name=event.event_name,
                         start_time=event.start_date_time,
                         location=event.location,
-                        current_attendance=count
+                        current_attendance=count,
+                        students=[]
                     ))
 
         return active_events
@@ -667,6 +677,103 @@ def add_event_custom_data_resolver(event_id: int, data: EventCustomDataInput) ->
 
 
 # ============================================================================
+# NEW RESOLVER HELPER FUNCTIONS (Based on existing schema functions)
+# ============================================================================
+
+def get_person_by_id(person_id: int) -> Optional[Person]:
+    """Helper to fetch a single Person object from MySQL by ID."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    query = """
+    SELECT person_id, first_name, last_name, email, phone, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') as birthday
+    FROM Person
+    WHERE person_id = %s;
+    """
+    
+    cursor.execute(query, (person_id,))
+    row = cursor.fetchone()
+    
+    cursor.close()
+    conn.close()
+    
+    if row:
+        return Person(
+            person_id=row['person_id'],
+            first_name=row['first_name'],
+            last_name=row['last_name'],
+            email=row['email'],
+            phone=row['phone'],
+            birthday=row['birthday']
+        )
+    return None
+
+def get_checked_in_student_ids(event_id: int) -> List[int]:
+    """Helper to get a list of checked-in student IDs from Redis."""
+    try:
+        # Redis key format for checked-in members: 'event:{event_id}:checked_in'
+        key = f"event:{event_id}:checked_in"
+        
+        # Get all members of the set and decode them
+        member_ids = r.smembers(key)
+        
+        # Convert set of bytes to list of integers
+        return [int(mid.decode()) for mid in member_ids]
+    except Exception as e:
+        print(f"Error fetching checked-in IDs for event {event_id}: {e}")
+        return []
+
+def get_live_dashboard_data_resolver() -> LiveDashboardData:
+    """
+    Resolves the LiveDashboardData field by consolidating data from MySQL and Redis.
+    """
+    
+    # NOTE: This relies on your existing get_active_events_resolver returning 
+    # a list of objects that contain the base fields (id, name, attendance, etc.)
+    # We will enrich this list with student data.
+    
+    # We call the existing resolver to get the initial list of active events
+    base_active_events = get_active_events_resolver() 
+
+    total_people_across_all_events = 0
+    full_active_events: List[ActiveEvent] = []
+
+    for base_event in base_active_events:
+        event_id = base_event.event_id
+        
+        # 1. Get student IDs from Redis
+        student_ids = get_checked_in_student_ids(event_id)
+        
+        # 2. Fetch full Person objects for each ID from MySQL
+        # We only fetch Person objects for the IDs returned by Redis
+        students: List[Person] = []
+        for sid in student_ids:
+            person = get_person_by_id(sid)
+            if person:
+                students.append(person)
+
+        # 3. Calculate metrics
+        current_attendance = len(students)
+        total_people_across_all_events += current_attendance
+
+        # 4. Create the final enriched ActiveEvent object
+        full_active_events.append(ActiveEvent(
+            event_id=event_id,
+            event_name=base_event.event_name,
+            start_time=base_event.start_time,
+            location=base_event.location,
+            current_attendance=current_attendance,
+            students=students
+        ))
+
+    return LiveDashboardData(
+        number_of_active_events=len(full_active_events),
+        total_people_across_all_events=total_people_across_all_events,
+        active_events=full_active_events
+    )
+
+
+# ============================================================================
 # QUERY TYPE
 # ============================================================================
 
@@ -737,6 +844,12 @@ class Query:
     active_events: List[ActiveEvent] = strawberry.field(
         resolver=get_active_events_resolver,
         description="Get all events with people currently checked in"
+    )
+
+    # Live Dashboard query
+    live_dashboard: LiveDashboardData = strawberry.field( 
+        resolver=get_live_dashboard_data_resolver,
+        description="Aggregated real-time data for the main dashboard view"
     )
 
 

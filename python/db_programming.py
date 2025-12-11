@@ -6,6 +6,7 @@ import os
 
 # For API
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 # Redis connection
 from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields, event_notes_collection
@@ -25,6 +26,7 @@ load_dotenv()
 
 # API
 app = Flask(__name__)
+CORS(app)
 
 # Test endpoint
 @app.get("/ping")

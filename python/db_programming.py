@@ -967,6 +967,6 @@ app.add_url_rule(
 # Run app -----------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
 # Depending on the port, running http://127.0.0.1:5000/people in Insomnia should yield the proper results.

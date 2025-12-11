@@ -291,7 +291,7 @@
         // NOTE: Assuming studentParents resolver exists on Query
         const query = ` 
           query StudentParents($id: Int!) {
-            studentParents(studentId: $id) { argument
+            studentParents(studentId: $id) {
               personId
               firstName
               lastName
@@ -420,7 +420,7 @@
         // NOTE: Assuming parentChildren resolver exists on Query
         const query = `
           query ParentChildren($id: Int!) {
-            parentChildren(parentId: $id) { argument
+            parentChildren(parentId: $id) {
               personId
               firstName
               lastName

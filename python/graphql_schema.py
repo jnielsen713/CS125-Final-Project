@@ -456,6 +456,67 @@ def get_small_group_members_resolver(group_id: int) -> List[Person]:
     except Exception as e:
         raise Exception(f"Error fetching group members: {e}")
 
+def get_student_parents_resolver(student_id: int) -> List[Person]:
+    """Get all parents linked to a student (childId)"""
+    try:
+        cnx = get_connection()
+        cursor = cnx.cursor()
+        cursor.execute("""
+                       SELECT p.personId, p.firstName, p.lastName, p.email, p.phone, p.birthday
+                       FROM Person p
+                       JOIN ParentChild pc ON p.personId = pc.parentId 
+                       WHERE pc.childId = %s
+                       ORDER BY p.lastName, p.firstName
+                       """, (student_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+
+        return [
+            Person(
+                person_id=row[0],
+                first_name=row[1],
+                last_name=row[2],
+                email=row[3],
+                phone=row[4],
+                birthday=row[5].isoformat() if row[5] else None
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        raise Exception(f"Error fetching student parents: {e}")
+
+
+def get_parent_children_resolver(parent_id: int) -> List[Person]:
+    """Get all children linked to a parent (parentId)"""
+    try:
+        cnx = get_connection()
+        cursor = cnx.cursor()
+        cursor.execute("""
+                       SELECT p.personId, p.firstName, p.lastName, p.email, p.phone, p.birthday
+                       FROM Person p
+                       JOIN ParentChild pc ON p.personId = pc.childId 
+                       WHERE pc.parentId = %s
+                       ORDER BY p.lastName, p.firstName
+                       """, (parent_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+
+        return [
+            Person(
+                person_id=row[0],
+                first_name=row[1],
+                last_name=row[2],
+                email=row[3],
+                phone=row[4],
+                birthday=row[5].isoformat() if row[5] else None
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        raise Exception(f"Error fetching parent children: {e}")
+
 
 # ============================================================================
 # MONGODB RESOLVERS
@@ -795,6 +856,16 @@ class Query:
     students: List[Person] = strawberry.field(
         resolver=get_all_students_resolver,
         description="Get all students (roleId = 1)"
+    )
+
+    student_parents: List[Person] = strawberry.field(
+        resolver=get_student_parents_resolver,
+        description="Get all parents for a specific student ID"
+    )
+
+    parent_children: List[Person] = strawberry.field(
+        resolver=get_parent_children_resolver,
+        description="Get all children for a specific parent ID"
     )
 
     # Event queries

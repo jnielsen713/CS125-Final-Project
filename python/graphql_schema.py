@@ -172,6 +172,18 @@ class Note:
     timestamp: str
     tags: List[str]
 
+@strawberry.type
+class CustomField:
+    """A single custom data field defined for an event type"""
+    name: str
+    type: str # e.g., 'text', 'number', 'boolean'
+
+@strawberry.type
+class EventTypeSchema:
+    """The MongoDB schema defining the custom fields for a specific EventType"""
+    event_type_id: int
+    fields: List[CustomField]
+
 
 # ============================================================================
 # INPUT TYPES FOR MUTATIONS
@@ -215,6 +227,18 @@ class DeleteNoteInput:
     """Input for deleting an existing note"""
     event_id: int
     note_id: str
+
+@strawberry.input
+class CustomFieldInput:
+    """Input for defining a custom field in an event type schema"""
+    name: str
+    type: str
+
+@strawberry.input
+class EventTypeSchemaInput:
+    """Input for creating a new event type schema"""
+    event_type_id: int
+    fields: List[CustomFieldInput]
 
 # ============================================================================
 # QUERY RESOLVERS
@@ -582,6 +606,37 @@ def get_parent_children_resolver(parent_id: int) -> List[Person]:
         ]
     except Exception as e:
         raise Exception(f"Error fetching parent children: {e}")
+
+def create_event_type_schema_resolver(input: EventTypeSchemaInput) -> EventTypeSchema:
+    """Create a new event type schema in MongoDB."""
+    
+    # Check if event_type_schemas collection is available, import if needed
+    if 'event_type_schemas' not in globals():
+        from mongo_connection import event_type_schemas
+
+    new_schema = {
+        "event_type_id": input.event_type_id,
+        "fields": [
+            {"name": field.name, "type": field.type}
+            for field in input.fields
+        ]
+    }
+    
+    # Simple check for duplicates before insert (based on event_type_id)
+    if event_type_schemas.find_one({"event_type_id": input.event_type_id}):
+        raise Exception(f"Event type schema with ID {input.event_type_id} already exists.")
+
+    result = event_type_schemas.insert_one(new_schema)
+    
+    if not result.inserted_id:
+        raise Exception("Failed to insert new event type schema.")
+
+    # Return the newly created schema object
+    # Assuming EventTypeSchema type exists and matches the structure of new_schema
+    return EventTypeSchema(
+        event_type_id=new_schema["event_type_id"],
+        fields=[CustomField(name=f["name"], type=f["type"]) for f in new_schema["fields"]]
+    )
 
 
 # ============================================================================
@@ -1209,14 +1264,24 @@ class Mutation:
         description="Add a new note/comment to an event (writes to MongoDB)"
     )
 
-    updateEventNote: Note = strawberry.field( # <-- NO HASH/COMMENT HERE
+    updateEventNote: Note = strawberry.field(
         resolver=update_event_note_resolver,
         description="Update an existing note (writes to MongoDB)"
     )
 
-    deleteEventNote: bool = strawberry.field( # <-- NO HASH/COMMENT HERE
+    deleteEventNote: bool = strawberry.field(
         resolver=delete_event_note_resolver,
         description="Delete a note by ID (writes to MongoDB)"
+    )
+
+    add_event_custom_data: EventCustomData = strawberry.field(
+        resolver=add_event_custom_data_resolver,
+        description="Add or update custom data for an event in MongoDB"
+    )
+
+    createEventTypeSchema: EventTypeSchema = strawberry.field(
+        resolver=create_event_type_schema_resolver,
+        description="Create a new custom data schema for an event type (writes to MongoDB)"
     )
 
 # ============================================================================

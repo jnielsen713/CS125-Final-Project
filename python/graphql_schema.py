@@ -20,8 +20,9 @@ import json
 
 # Import database connections
 from mysql_connection import get_connection
-from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields
+from mongo_connection import get_mongo_connection, event_type_schemas, event_custom_fields, event_notes_collection
 from redis_connection import get_redis_connection
+import uuid
 
 # Get database clients
 m = get_mongo_connection()
@@ -162,6 +163,15 @@ class LiveDashboardData:
     total_people_across_all_events: int
     active_events: List[ActiveEvent]
 
+@strawberry.type
+class Note:
+    """Represents a single note/comment for an event"""
+    note_id: str
+    author: str
+    content: str
+    timestamp: str
+    tags: List[str]
+
 
 # ============================================================================
 # INPUT TYPES FOR MUTATIONS
@@ -183,6 +193,28 @@ class CheckInInput:
     student_id: int
     event_id: int
 
+@strawberry.input
+class AddNoteInput:
+    """Input for adding a new note to an event"""
+    event_id: int
+    author: str
+    content: str
+    tags: Optional[List[str]] = None
+
+@strawberry.input
+class UpdateNoteInput:
+    """Input for updating an existing note"""
+    event_id: int
+    note_id: str
+    content: Optional[str] = None
+    author: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+@strawberry.input
+class DeleteNoteInput:
+    """Input for deleting an existing note"""
+    event_id: int
+    note_id: str
 
 # ============================================================================
 # QUERY RESOLVERS
@@ -858,7 +890,7 @@ def get_checked_in_student_ids(event_id: int) -> List[int]:
         member_ids = r.smembers(key)
         
         # Convert set of bytes to list of integers
-        return [int(mid.decode()) for mid in member_ids]
+        return [int(mid) for mid in member_ids]
     except Exception as e:
         print(f"Error fetching checked-in IDs for event {event_id}: {e}")
         return []
@@ -908,6 +940,128 @@ def get_live_dashboard_data_resolver() -> LiveDashboardData:
         active_events=full_active_events
     )
 
+
+def get_event_notes_resolver(event_id: int) -> List[Note]:
+    """Fetch all notes for a specific event from MongoDB."""
+    try:
+        # Notes are stored in a document with the event_id as the key
+        doc = event_notes_collection.find_one({"event_id": event_id}, {"_id": 0})
+
+        if not doc or not doc.get("notes"):
+            return []
+
+        # Convert the raw notes data into a list of the Note GraphQL type
+        notes = []
+        for note_data in doc["notes"]:
+            notes.append(Note(
+                note_id=note_data["noteId"],
+                author=note_data["author"],
+                content=note_data["content"],
+                timestamp=note_data["timestamp"],
+                tags=note_data.get("tags", [])
+            ))
+        return notes
+    except Exception as e:
+        # Use a print/log for server-side debugging, then raise the standard error.
+        print(f"MongoDB Error fetching notes for event {event_id}: {e}")
+        raise Exception(f"Error fetching notes: {e}")
+
+def add_event_note_resolver(input: AddNoteInput) -> Note:
+    """Add a new note to an event (writes to MongoDB) and returns the new Note object."""
+    try:
+        # Assumes event_notes_collection is imported from mongo_connection
+        new_note = {
+            "noteId": str(uuid.uuid4()), # Generate a unique ID for the note
+            "author": input.author,
+            "content": input.content,
+            "timestamp": datetime.now().isoformat(),
+            "tags": input.tags if input.tags else []
+        }
+
+        # Use upsert to create the document if it doesn't exist, and push the note
+        event_notes_collection.update_one(
+            {"event_id": input.event_id},
+            {"$push": {"notes": new_note}},
+            upsert=True
+        )
+
+        # Return the newly created Note object
+        return Note(
+            note_id=new_note["noteId"],
+            author=new_note["author"],
+            content=new_note["content"],
+            timestamp=new_note["timestamp"],
+            tags=new_note["tags"]
+        )
+    except Exception as e:
+        print(f"MongoDB Error adding note: {e}")
+        raise Exception(f"Error adding note: {e}")
+
+def update_event_note_resolver(input: UpdateNoteInput) -> Note:
+    """Update an existing note (writes to MongoDB) and returns the updated Note object."""
+    # event_notes_collection is globally available
+    
+    update_fields = {}
+    
+    if input.content is not None:
+        update_fields["notes.$.content"] = input.content
+    if input.author is not None:
+        update_fields["notes.$.author"] = input.author
+    if input.tags is not None:
+        update_fields["notes.$.tags"] = input.tags
+
+    # Always update the timestamp when modifying the note
+    update_fields["notes.$.timestamp"] = datetime.now().isoformat() # Correctly using datetime
+
+    result = event_notes_collection.update_one(
+        {"event_id": input.event_id, "notes.noteId": input.note_id},
+        {"$set": update_fields}
+    )
+
+    if result.matched_count == 0:
+        raise Exception(f"Note with ID {input.note_id} not found for event {input.event_id}")
+
+    # To fulfill the return type, we need to return the updated note object.
+    # The simplest way is to fetch the entire document and pull the single note.
+    doc = event_notes_collection.find_one({"event_id": input.event_id})
+    if doc and doc.get("notes"):
+        for note_data in doc["notes"]:
+            if note_data["noteId"] == input.note_id:
+                return Note(
+                    note_id=note_data["noteId"],
+                    author=note_data["author"],
+                    content=note_data["content"],
+                    timestamp=note_data["timestamp"],
+                    tags=note_data.get("tags", [])
+                )
+    
+    # Safety catch
+    raise Exception(f"Could not retrieve updated note with ID {input.note_id}")
+
+def delete_event_note_resolver(input: DeleteNoteInput) -> bool:
+    """Delete a note by ID (writes to MongoDB) and returns a boolean success status."""
+    # event_notes_collection is globally available
+    
+    result = event_notes_collection.update_one(
+        {"event_id": input.event_id},
+        {
+            "$pull": {
+                "notes": {"noteId": input.note_id}
+            }
+        }
+    )
+
+    # Note: We return True even if matched_count is 0, because the note is effectively deleted.
+    # The only exception is if the document exists but the noteId isn't found, which is a logic error.
+    if result.matched_count == 0:
+        return True # Event document not found, so note is deleted.
+    
+    if result.modified_count == 0:
+        # Event doc was found, but note was not pulled (meaning noteId did not exist).
+        # We can still return True, or raise an exception to be strict. I'll stick to a clean return.
+        pass # Note: Changed to pass for simplicity/robustness.
+
+    return True
 
 # ============================================================================
 # QUERY TYPE
@@ -1003,6 +1157,12 @@ class Query:
         description="Aggregated real-time data for the main dashboard view"
     )
 
+    # Notes query
+    event_notes: List[Note] = strawberry.field(
+    resolver=get_event_notes_resolver,
+    description="Get all notes for a specific event from MongoDB"
+)
+
 
 # ============================================================================
 # MUTATION TYPE
@@ -1044,6 +1204,20 @@ class Mutation:
         description="Add or update custom data for an event in MongoDB"
     )
 
+    addEventNote: Note = strawberry.field(
+        resolver=add_event_note_resolver,
+        description="Add a new note/comment to an event (writes to MongoDB)"
+    )
+
+    updateEventNote: Note = strawberry.field( # <-- NO HASH/COMMENT HERE
+        resolver=update_event_note_resolver,
+        description="Update an existing note (writes to MongoDB)"
+    )
+
+    deleteEventNote: bool = strawberry.field( # <-- NO HASH/COMMENT HERE
+        resolver=delete_event_note_resolver,
+        description="Delete a note by ID (writes to MongoDB)"
+    )
 
 # ============================================================================
 # SCHEMA

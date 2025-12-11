@@ -171,7 +171,7 @@
         );
       }
       
-      // FIX: Access fields using camelCase as returned by GraphQL
+      // Access fields using camelCase as returned by GraphQL
       const numberOfActiveEvents = liveData.numberOfActiveEvents;
       const totalPeopleAcrossAllEvents = liveData.totalPeopleAcrossAllEvents;
 
@@ -185,64 +185,67 @@
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Active Events Card */}
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg relative">
                 <div className="text-sm opacity-80 font-medium">Active Events</div>
                 <div className="text-4xl font-extrabold mt-1">{numberOfActiveEvents}</div>
                 <Calendar className="absolute bottom-4 right-4 opacity-20" size={48} />
               </div>
 
               {/* Total Attendees Card */}
-              <div className="bg-gradient-to-br from-cyan-500 to-teal-600 rounded-lg p-6 text-white shadow-lg">
+              <div className="bg-gradient-to-br from-cyan-500 to-teal-600 rounded-lg p-6 text-white shadow-lg relative">
                 <div className="text-sm opacity-80 font-medium">Total Checked In</div>
                 <div className="text-4xl font-extrabold mt-1">{totalPeopleAcrossAllEvents}</div>
                 <Users className="absolute bottom-4 right-4 opacity-20" size={48} />
               </div>
 
               {/* Placeholder Card */}
-              <div className="bg-gradient-to-br from-gray-300 to-gray-400 rounded-lg p-6 text-gray-800 shadow-lg">
+              <div className="bg-gradient-to-br from-gray-300 to-gray-400 rounded-lg p-6 text-gray-800 shadow-lg relative">
                 <div className="text-sm opacity-80 font-medium">Coming Soon</div>
                 <div className="text-4xl font-extrabold mt-1">N/A</div>
                 <Settings className="absolute bottom-4 right-4 opacity-20" size={48} />
               </div>
             </div>
 
-            {/* Live Events Table */}
-            <h3 className="text-xl font-bold text-gray-800 pt-4">Current Live Events ({liveData.activeEvents.length})</h3>
-            <div className="space-y-4">
-              {liveData.activeEvents.length > 0 ? (
-                liveData.activeEvents.map(event => (
-                  <div key={event.eventId} className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="text-lg font-bold text-blue-600">{event.eventName}</h4>
-                        <p className="text-sm text-gray-500">{event.location} &bull; {event.startTime ? new Date(event.startTime).toLocaleString() : 'N/A'}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-                          {event.currentAttendance} Checked In
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Student List (now correctly populated via LiveDashboardData) */}
-                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
-                      {event.students && event.students.length > 0 ? (
-                        event.students.map(student => (
-                          <span key={student.personId} className="bg-white px-3 py-1 rounded-full text-sm text-gray-700 border border-blue-200 shadow-sm">
-                            {/* FIX: Use camelCase properties for rendering */}
-                            {student.firstName} {student.lastName}
-                          </span>
-                        ))
-                      ) : (
-                          <p className="text-xs text-gray-500 italic">No students checked in yet.</p>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-8">No events currently active.</p>
-              )}
+            {/* Active Check-In Details Section */}
+            <h3 className="text-xl font-bold text-gray-800 pt-8 mb-4 border-t border-gray-100 mt-8">Active Check-Ins</h3>
+            <div className="space-y-6">
+                {liveData.activeEvents && liveData.activeEvents.length > 0 ? (
+                    liveData.activeEvents.map(event => (
+                        <div key={event.eventId} className="border border-blue-200 rounded-lg p-5 bg-blue-50 shadow-md">
+                            <div className="flex justify-between items-center mb-3 border-b pb-2">
+                                <h4 className="text-xl font-semibold text-blue-800">{event.eventName}</h4>
+                                <span className="text-lg font-bold text-blue-600">
+                                    {event.currentAttendance} Checked In
+                                </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-3">
+                                <span className="font-medium">Location:</span> {event.location}
+                                <br />
+                                <span className="font-medium">Start Time:</span> {new Date(event.startTime).toLocaleString()}
+                            </p>
+                            
+                            <h5 className="font-semibold text-gray-700 mt-4 mb-2">Checked-in Students:</h5>
+                            {event.students && event.students.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                    {/* Iterating over the students list (now correctly populated) */}
+                                    {event.students.map(student => (
+                                        <div key={student.personId} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                                            <p className="font-medium text-sm">
+                                                {student.firstName} {student.lastName}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 italic text-sm">No students currently checked in.</p>
+                            )}
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-gray-500 text-center py-8 text-lg">No events currently active with check-ins.</p>
+                )}
             </div>
+            
           </div>
         </div>
       );
@@ -1178,32 +1181,48 @@
         }
       };
 
-      const addNote = async () => {
-        if (!selectedEvent || !content.trim()) {
-          setMessage('Note content cannot be empty.');
-          setTimeout(() => setMessage(''), 3000);
-          return;
-        }
-
-        const mutation = `
-          mutation AddNote($eventId: Int!, $content: String!, $author: String) {
-            addEventNote(eventId: $eventId, content: $content, author: $author) {
-              noteId
+      // --- THE CORRECTED FUNCTION ---
+        const addNote = async () => {
+            if (!selectedEvent || !content.trim()) {
+                setMessage('Please select an event and provide note content.');
+                return;
             }
-          }
-        `;
-        try {
-          await graphqlFetch(mutation, { eventId: selectedEvent, content: content.trim(), author: author.trim() || 'Anonymous' });
-          setMessage('✓ Note added successfully!');
-          setContent('');
-          setAuthor('');
-          fetchEventNotes(selectedEvent);
-          setTimeout(() => setMessage(''), 3000);
-        } catch (err) {
-          setMessage(`Error adding note: ${err.message}`);
-          setTimeout(() => setMessage(''), 5000);
-        }
-      };
+
+            // 1. Corrected Mutation String: Accepts one variable ($input) and uses it
+            const mutation = `
+                mutation AddNote($input: AddNoteInput!) {
+                    addEventNote(input: $input) {
+                        noteId
+                        author
+                        content
+                        timestamp
+                        tags
+                    }
+                }
+            `;
+
+            // 2. Corrected Variables Object: Wraps all fields inside a top-level 'input' key
+            const variables = {
+                input: {
+                    eventId: parseInt(selectedEvent),
+                    content: content.trim(),
+                    author: author.trim() || 'Anonymous',
+                    tags: [] // Ensure tags is included as an empty list if not collected
+                }
+            };
+
+            try {
+                await graphqlFetch(mutation, variables);
+                setMessage('✓ Note added successfully!');
+                setContent('');
+                setAuthor('');
+                fetchEventNotes(selectedEvent); // Refresh notes list
+                setTimeout(() => setMessage(''), 3000);
+            } catch (err) {
+                setMessage(`Error adding note: ${err.message}`);
+                setTimeout(() => setMessage(''), 5000);
+            }
+        };
       
       return (
         <div className="bg-white shadow-xl rounded-xl p-6">

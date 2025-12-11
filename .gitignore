@@ -9,3 +9,8 @@ secrets
 __pycache__/
 # Pycharm resources
 .idea
+
+*.pyc
+*.pyo
+*.pyd
+.DS_Store

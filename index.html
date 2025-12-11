@@ -81,6 +81,7 @@
               location
               startTime
               currentAttendance
+              customData
               students {
                 personId 
                 firstName 
@@ -223,7 +224,26 @@
                                 <br />
                                 <span className="font-medium">Start Time:</span> {new Date(event.startTime).toLocaleString()}
                             </p>
-                            
+
+                            {/* MongoDB Custom Data Display */}
+                            {event.customData && Object.keys(event.customData).length > 0 && (
+                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+                                    <h5 className="font-semibold text-purple-800 text-sm mb-2">📋 Event Details (MongoDB)</h5>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        {Object.entries(event.customData).map(([key, value]) => (
+                                            <div key={key} className="flex">
+                                                <span className="font-medium text-gray-700 capitalize">
+                                                    {key.replace(/_/g, ' ')}:
+                                                </span>
+                                                <span className="ml-2 text-gray-600">
+                                                    {typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <h5 className="font-semibold text-gray-700 mt-4 mb-2">Checked-in Students:</h5>
                             {event.students && event.students.length > 0 ? (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">

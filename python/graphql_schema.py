@@ -145,6 +145,7 @@ class ActiveEvent:
     location: str
     current_attendance: int
     students: List[Person]
+    custom_data: Optional[strawberry.scalars.JSON] = None
 
 
 @strawberry.type
@@ -950,43 +951,57 @@ def get_checked_in_student_ids(event_id: int) -> List[int]:
         print(f"Error fetching checked-in IDs for event {event_id}: {e}")
         return []
 
+
 def get_live_dashboard_data_resolver() -> LiveDashboardData:
     """
-    Resolves the LiveDashboardData field by consolidating data from MySQL and Redis.
+    Resolves the LiveDashboardData field by consolidating data from MySQL, Redis, AND MongoDB.
+    - MySQL: Event details, student information
+    - Redis: Real-time check-in status
+    - MongoDB: Custom event data fields
     """
-    
+
     # We call the existing resolver to get the initial list of active events
-    base_active_events = get_active_events_resolver() 
+    base_active_events = get_active_events_resolver()
 
     total_people_across_all_events = 0
     full_active_events: List[ActiveEvent] = []
 
     for base_event in base_active_events:
         event_id = base_event.event_id
-        
-        # 1. Get student IDs from Redis
+
+        # 1. Get student IDs from Redis (REDIS DATA)
         student_ids = get_checked_in_student_ids(event_id)
-        
-        # 2. Fetch full Person objects for each ID from MySQL
-        # We only fetch Person objects for the IDs returned by Redis
+
+        # 2. Fetch full Person objects for each ID from MySQL (MYSQL DATA)
         students: List[Person] = []
         for sid in student_ids:
             person = get_person_by_id(sid)
             if person:
                 students.append(person)
 
-        # 3. Calculate metrics
+        # 3. Fetch custom event data from MongoDB (MONGODB DATA)
+        custom_data = None
+        try:
+            mongo_doc = event_custom_fields.find_one({"eventId": event_id}, {"_id": 0})
+            if mongo_doc:
+                custom_data = mongo_doc.get("custom_data", {})
+        except Exception as e:
+            print(f"MongoDB fetch error for event {event_id}: {e}")
+            custom_data = None
+
+        # 4. Calculate metrics
         current_attendance = len(students)
         total_people_across_all_events += current_attendance
 
-        # 4. Create the final enriched ActiveEvent object
+        # 5. Create the final enriched ActiveEvent object with data from all 3 databases
         full_active_events.append(ActiveEvent(
             event_id=event_id,
             event_name=base_event.event_name,
             start_time=base_event.start_time,
             location=base_event.location,
             current_attendance=current_attendance,
-            students=students
+            students=students,
+            custom_data=custom_data  # MongoDB data included here!
         ))
 
     return LiveDashboardData(

@@ -609,7 +609,7 @@ def get_parent_children_resolver(parent_id: int) -> List[Person]:
 
 def create_event_type_schema_resolver(input: EventTypeSchemaInput) -> EventTypeSchema:
     """Create a new event type schema in MongoDB."""
-    
+    global event_type_schemas
     # Check if event_type_schemas collection is available, import if needed
     if 'event_type_schemas' not in globals():
         from mongo_connection import event_type_schemas
@@ -770,6 +770,30 @@ def get_active_events_resolver() -> List[ActiveEvent]:
         return active_events
     except Exception as e:
         raise Exception(f"Error fetching active events: {e}")
+
+def get_event_type_schemas_resolver() -> List[EventTypeSchema]:
+    """Fetch all event type schemas from MongoDB."""
+    try:
+        # event_type_schemas is imported from mongo_connection
+        docs = event_type_schemas.find({})
+
+        schemas = []
+        for doc in docs:
+            fields = []
+            for field_data in doc.get("fields", []):
+                fields.append(CustomField(
+                    name=field_data["name"],
+                    type=field_data["type"]
+                ))
+            
+            schemas.append(EventTypeSchema(
+                event_type_id=doc["event_type_id"],
+                fields=fields
+            ))
+        return schemas
+    except Exception as e:
+        print(f"MongoDB Error fetching event type schemas: {e}")
+        raise Exception(f"Error fetching event type schemas: {e}")
 
 
 # ============================================================================
@@ -1216,7 +1240,12 @@ class Query:
     event_notes: List[Note] = strawberry.field(
     resolver=get_event_notes_resolver,
     description="Get all notes for a specific event from MongoDB"
-)
+    )
+    
+    eventTypeSchemas: List[EventTypeSchema] = strawberry.field(
+        resolver=get_event_type_schemas_resolver,
+        description="Get all custom field schemas for all event types from MongoDB"
+    )
 
 
 # ============================================================================

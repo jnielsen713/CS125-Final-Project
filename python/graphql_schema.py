@@ -95,6 +95,7 @@ class SmallGroup:
     small_group_id: int
     name: str
     description: Optional[str] = None
+    leader_id: Optional[int] = None 
     leader: Optional[Person] = None
 
 
@@ -276,6 +277,37 @@ def get_all_students_resolver() -> List[Person]:
         raise Exception(f"Error fetching students: {e}")
 
 
+def get_all_parents_resolver() -> List[Person]:
+    """Fetch all people who are parents (appear as parentId in ParentChild)"""
+    try:
+        cnx = get_connection()
+        cursor = cnx.cursor()
+        # Use JOIN and DISTINCT to efficiently select only people who are parents
+        cursor.execute("""
+                       SELECT DISTINCT p.personId, p.firstName, p.lastName, p.email, p.phone, p.birthday
+                       FROM Person p
+                       JOIN ParentChild pc ON p.personId = pc.parentId
+                       ORDER BY p.lastName, p.firstName
+                       """)
+        rows = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+
+        return [
+            Person(
+                person_id=row[0],
+                first_name=row[1],
+                last_name=row[2],
+                email=row[3],
+                phone=row[4],
+                birthday=row[5].isoformat() if row[5] else None
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        raise Exception(f"Error fetching parents: {e}")
+
+
 def get_all_events_resolver() -> List[Event]:
     """Fetch all events with their type names"""
     try:
@@ -403,10 +435,11 @@ def get_all_small_groups_resolver() -> List[SmallGroup]:
 
         groups = []
         for row in rows:
+            leader_id = row[3] # Extract the leader ID
             leader = None
-            if row[3]:  # if leaderId exists
+            if leader_id:  # if leaderId exists
                 leader = Person(
-                    person_id=row[3],
+                    person_id=leader_id,
                     first_name=row[4],
                     last_name=row[5],
                     email=None,
@@ -418,6 +451,7 @@ def get_all_small_groups_resolver() -> List[SmallGroup]:
                 small_group_id=row[0],
                 name=row[1],
                 description=row[2],
+                leader_id=leader_id,
                 leader=leader
             ))
 
@@ -712,6 +746,47 @@ def check_out_student_resolver(student_id: int, event_id: int) -> LiveEventStatu
         raise Exception(f"Error checking out student: {e}")
 
 
+# --- NEW MUTATION RESOLVERS FOR SMALL GROUPS ---
+
+def add_student_to_group_resolver(student_id: int, group_id: int) -> bool:
+    """Add a student to a small group (writes to MySQL)"""
+    try:
+        cnx = get_connection()
+        cursor = cnx.cursor()
+        cursor.execute("""
+                       INSERT INTO SmallGroupMembership (studentId, smallGroupId, joinedDate)
+                       VALUES (%s, %s, NOW())
+                       """, (student_id, group_id))
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        return True
+    except Exception as e:
+        # This will catch duplicate key errors as well, which is fine for now.
+        raise Exception(f"Error adding student to group: {e}")
+
+
+def remove_student_from_group_resolver(student_id: int, group_id: int) -> bool:
+    """Remove a student from a small group (writes to MySQL)"""
+    try:
+        cnx = get_connection()
+        cursor = cnx.cursor()
+        cursor.execute("""
+                       DELETE FROM SmallGroupMembership
+                       WHERE studentId = %s AND smallGroupId = %s
+                       """, (student_id, group_id))
+        cnx.commit()
+        # Returns True if at least one row was deleted
+        success = cursor.rowcount > 0
+        cursor.close()
+        cnx.close()
+        return success
+    except Exception as e:
+        raise Exception(f"Error removing student from group: {e}")
+
+# --- END NEW MUTATION RESOLVERS ---
+
+
 def add_event_custom_data_resolver(event_id: int, data: EventCustomDataInput) -> EventCustomData:
     """Add or update custom data for an event in MongoDB"""
     try:
@@ -747,9 +822,9 @@ def get_person_by_id(person_id: int) -> Optional[Person]:
     cursor = conn.cursor(dictionary=True)
     
     query = """
-    SELECT person_id, first_name, last_name, email, phone, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') as birthday
+    SELECT personId, firstName, lastName, email, phone, birthday
     FROM Person
-    WHERE person_id = %s;
+    WHERE personId = %s;
     """
     
     cursor.execute(query, (person_id,))
@@ -760,20 +835,24 @@ def get_person_by_id(person_id: int) -> Optional[Person]:
     
     if row:
         return Person(
-            person_id=row['person_id'],
-            first_name=row['first_name'],
-            last_name=row['last_name'],
+            person_id=row['personId'],
+            first_name=row['firstName'],
+            last_name=row['lastName'],
             email=row['email'],
             phone=row['phone'],
-            birthday=row['birthday']
+            birthday=row['birthday'].isoformat() if row['birthday'] else None
         )
     return None
 
 def get_checked_in_student_ids(event_id: int) -> List[int]:
     """Helper to get a list of checked-in student IDs from Redis."""
+    if not r:
+        print("Redis connection not available")
+        return []
+        
     try:
-        # Redis key format for checked-in members: 'event:{event_id}:checked_in'
-        key = f"event:{event_id}:checked_in"
+        # Redis key format for checked-in members: 'event:{event_id}:checkedIn'
+        key = f"event:{event_id}:checkedIn" 
         
         # Get all members of the set and decode them
         member_ids = r.smembers(key)
@@ -788,10 +867,6 @@ def get_live_dashboard_data_resolver() -> LiveDashboardData:
     """
     Resolves the LiveDashboardData field by consolidating data from MySQL and Redis.
     """
-    
-    # NOTE: This relies on your existing get_active_events_resolver returning 
-    # a list of objects that contain the base fields (id, name, attendance, etc.)
-    # We will enrich this list with student data.
     
     # We call the existing resolver to get the initial list of active events
     base_active_events = get_active_events_resolver() 
@@ -856,6 +931,11 @@ class Query:
     students: List[Person] = strawberry.field(
         resolver=get_all_students_resolver,
         description="Get all students (roleId = 1)"
+    )
+
+    parents: List[Person] = strawberry.field( 
+        resolver=get_all_parents_resolver,
+        description="Get all people who are linked as a parent (have children)"
     )
 
     student_parents: List[Person] = strawberry.field(
@@ -946,6 +1026,18 @@ class Mutation:
         resolver=check_out_student_resolver,
         description="Check out a student from an event (updates Redis)"
     )
+    
+    # --- NEW SMALL GROUP MUTATIONS ---
+    add_student_to_group: bool = strawberry.field(
+        resolver=add_student_to_group_resolver,
+        description="Add a student to a small group"
+    )
+
+    remove_student_from_group: bool = strawberry.field(
+        resolver=remove_student_from_group_resolver,
+        description="Remove a student from a small group"
+    )
+    # ---------------------------------
 
     add_event_custom_data: EventCustomData = strawberry.field(
         resolver=add_event_custom_data_resolver,
